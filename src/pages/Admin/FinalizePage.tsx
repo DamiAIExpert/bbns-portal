@@ -110,7 +110,7 @@ const FinalizePage: React.FC = () => {
 
   const [conFormat, setConFormat] = useState<'srs' | 'plain'>('srs');
   const [conOutput, setConOutput] = useState<'md' | 'docx' | 'pdf'>('md');
-  const [conPolish, setConPolish] = useState<'none' | 'md' | 'fr'>('none');
+  const [conPolish, setConPolish] = useState<'none' | 'md' | 'gemini'>('none');
 
   const [conPreviewOpen, setConPreviewOpen] = useState(false);
   const [conPreviewText, setConPreviewText] = useState('');
@@ -248,7 +248,7 @@ const FinalizePage: React.FC = () => {
       since: conRange?.[0]?.toISOString(),
       until: conRange?.[1]?.toISOString(),
     }),
-    [conTopicKey, conRange]
+    [conTopicKey, conRange],
   );
 
   const doDownloadConsolidated = async () => {
@@ -541,11 +541,11 @@ const FinalizePage: React.FC = () => {
             <Segmented
               block
               value={conPolish}
-              onChange={(v) => setConPolish(v as 'none' | 'md' | 'fr')}
+              onChange={(v) => setConPolish(v as 'none' | 'md' | 'gemini')}
               options={[
                 { label: 'None', value: 'none' },
                 { label: 'SRS text', value: 'md' },
-                { label: 'Only FR items', value: 'fr' },
+                { label: 'Gemini Polish', value: 'gemini' },
               ]}
             />
           </Space>
