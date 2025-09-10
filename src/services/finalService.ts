@@ -83,6 +83,15 @@ const arrayBufferToText = (buf: ArrayBuffer) =>
 export const saveBlob = (blob: Blob, filename: string) =>
   saveBlobBrowser(blob, filename);
 
+/** Normalize any incoming polish value to a concrete mode or 'none'. */
+const normalizePolish = (
+  p: PolishMode | string | undefined
+): 'md' | 'gemini' | 'fr' | 'none' => {
+  if (p === true || p === 'true') return 'md'; // legacy truthy → default mode
+  if (p === 'md' || p === 'gemini' || p === 'fr') return p;
+  return 'none';
+};
+
 /* -------------------------------------------------------------------------- */
 /* Finalize single proposal                                                    */
 /* -------------------------------------------------------------------------- */
@@ -122,7 +131,7 @@ export const finalizeProposalAlias = async (
 /* Final artifact (single negotiation)                                         */
 /* -------------------------------------------------------------------------- */
 
-/** Download the .txt artifact to disk (browser) or return the filename/content (Node). */
+/** Download the .txt artifact to disk (browser) or return the filename/content (SSR). */
 export const downloadFinalArtifact = async (
   negotiationId: string,
   opts?: { filename?: string; signal?: AbortSignal }
@@ -141,7 +150,7 @@ export const downloadFinalArtifact = async (
     return { filename: fname };
   }
 
-  // Node / SSR fallback: return Buffer/filename data if you want to persist yourself
+  // SSR: return text content for persistence
   const res = await api.get<ArrayBuffer>(path, {
     responseType: 'arraybuffer',
     headers: { Accept: 'text/plain' },
@@ -239,18 +248,13 @@ const buildConsolidatedParams = (
     output,
   };
 
-  // Polish: support boolean/string variants per controller
-  if (
-    polish === true ||
-    polish === 'true' ||
-    polish === 'gemini' ||
-    polish === 'md' ||
-    polish === 'fr'
-  ) {
-    params.polish = String(polish);
+  // ✅ Normalize polish once (supports legacy "true")
+  const mode = normalizePolish(polish);
+  if (mode !== 'none') {
+    params.polish = mode;
   }
-  if (typeof download === 'boolean') params.download = download;
 
+  if (typeof download === 'boolean') params.download = download;
   return params;
 };
 
@@ -262,7 +266,7 @@ const buildConsolidatedParams = (
  * - download: boolean (hints server to set Content-Disposition attachment/inline)
  *
  * Browser: triggers a file save.
- * Node: returns { filename, content? | buffer? } for you to persist.
+ * SSR: returns { filename, content? | buffer? } for you to persist.
  */
 export const exportConsolidated = async (opts?: {
   filters?: ConsolidatedFilters;
@@ -301,7 +305,7 @@ export const exportConsolidated = async (opts?: {
     return { filename: fname };
   }
 
-  // Node / SSR
+  // SSR
   const res = await api.get<ArrayBuffer>(path, {
     params,
     responseType: 'arraybuffer',
@@ -310,15 +314,15 @@ export const exportConsolidated = async (opts?: {
   });
   const cd = (res.headers as any)['content-disposition'] as string | undefined;
   const fname =
-    opts?.filename ?? getFilenameFromCD(cd, defaultFilenameForOutput(output));
+      opts?.filename ?? getFilenameFromCD(cd, defaultFilenameForOutput(output));
 
   if (output === 'md' || format === 'plain') {
     // text payload
     return { filename: fname, content: arrayBufferToText(res.data) };
   }
 
-  // binary payload (docx/pdf)
-  return { filename: fname, buffer: Buffer.from(res.data) };
+  // binary payload (docx/pdf) — ✅ no Node Buffer
+  return { filename: fname, buffer: new Uint8Array(res.data) };
 };
 
 /**
@@ -394,7 +398,7 @@ export const downloadConsolidatedAdvanced = async (
   params.output = (opts?.output ?? 'md');
   params.download = String(opts?.download ?? true);
 
-  const accept = acceptForOutput(params.output);
+  const accept = acceptForOutput(params.output as ConsolidatedOutput);
 
   if (isBrowser()) {
     const res = await api.get(path, {
@@ -404,7 +408,7 @@ export const downloadConsolidatedAdvanced = async (
       signal: opts?.signal,
     });
     const cd = (res.headers as any)['content-disposition'] as string | undefined;
-    const fallback = defaultFilenameForOutput(params.output);
+    const fallback = defaultFilenameForOutput(params.output as ConsolidatedOutput);
     const fname = opts?.filename ?? getFilenameFromCD(cd, fallback);
     saveBlobBrowser(res.data as Blob, fname);
     return { filename: fname };
@@ -417,8 +421,9 @@ export const downloadConsolidatedAdvanced = async (
     signal: opts?.signal,
   });
   const cd = (res.headers as any)['content-disposition'] as string | undefined;
-  const fallback = defaultFilenameForOutput(params.output);
+  const fallback = defaultFilenameForOutput(params.output as ConsolidatedOutput);
   const fname = opts?.filename ?? getFilenameFromCD(cd, fallback);
+  // Keep advanced API shape: return raw ArrayBuffer in 'content'
   return { filename: fname, content: res.data };
 };
 
