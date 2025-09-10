@@ -1,657 +1,677 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+// src/pages/Admin/EvaluationReportPage.tsx
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Table,
-  Button,
-  message,
+  Card,
   Typography,
-  Space,
-  Tag,
-  Input,
-  DatePicker,
+  Spin,
+  Alert,
   Select,
   Row,
   Col,
-  Tooltip,
-  Popconfirm,
-  Drawer,
-  Divider,
+  Statistic,
+  Button,
   Empty,
-  Segmented,
-  Badge,
-} from 'antd';
+  Progress,
+  App,
+  Tooltip,
+  Table,
+  Space,
+  Divider,
+  Collapse,
+  InputNumber,
+} from "antd";
 import {
-  CheckCircleOutlined,
-  FileTextOutlined,
+  BarChartOutlined,
   DownloadOutlined,
+  ClockCircleOutlined,
+  SyncOutlined,
+  ArrowUpOutlined,
+  SmileOutlined,
+  CheckSquareOutlined,
+  LikeOutlined,
   ReloadOutlined,
-  SearchOutlined,
-  EyeOutlined,
-  CloudDownloadOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  FileMarkdownOutlined,
-  ExperimentOutlined,
-} from '@ant-design/icons';
-import dayjs, { Dayjs } from 'dayjs';
+  InfoCircleOutlined,
+} from "@ant-design/icons";
+import { getAllProposals, getEvaluationMetrics, downloadEvaluationReport } from "../../services/adminService";
+import api from "../../services/api";
+import type { Proposal } from "../../services/proposalService";
+import type { EvaluationMetrics } from "../../services/adminService";
 
-import api from '../../services/api';
-import {
-  finalizeProposal,
-  downloadFinalArtifact,
-  getFinalArtifactText,
-  getConsolidatedMarkdownText,
-  exportConsolidated,
-} from '../../services/finalService';
+const { Title, Paragraph, Text } = Typography;
 
-const { Title, Text, Paragraph } = Typography;
-const { RangePicker } = DatePicker;
+/* ───────────────────────────────── Types ───────────────────────────────── */
 
-type Status = 'pending' | 'processed' | 'negotiating' | 'finalized';
-
-interface ProposalRow {
-  _id: string;
-  title: string;
-  status: Status;
+type UIProposal = Proposal & {
   negotiationId?: string | null;
-  submitter?: { _id: string; name?: string; email?: string } | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/* -------------------------------- UI helpers ------------------------------- */
-const StatusTag: React.FC<{ status: Status }> = ({ status }) => {
-  const map: Record<Status, { color: string; text: string }> = {
-    pending: { color: 'gold', text: 'PENDING' },
-    processed: { color: 'blue', text: 'PROCESSED' },
-    negotiating: { color: 'geekblue', text: 'NEGOTIATING' },
-    finalized: { color: 'green', text: 'FINALIZED' },
-  };
-  const { color, text } = map[status] ?? { color: 'default', text: status.toUpperCase() };
-  return <Tag color={color}>{text}</Tag>;
+  status?: string;
+  title: string;
+  _id: string;
 };
 
-// Try primary admin list, fall back to public/all endpoint if needed
-async function fetchAdminProposals(params: Record<string, any>) {
-  try {
-    const { data } = await api.get<{ proposals: ProposalRow[]; total: number }>('/admin/proposals', {
-      params,
-    });
-    return data;
-  } catch {
-    const { data } = await api.get<ProposalRow[]>('/proposals/all', { params });
-    return { proposals: data, total: data.length ?? 0 };
-  }
-}
+type EvalRow = {
+  negotiationId: string;
+  proposalTitles?: string;
+  timeToConsensus: number | null; // seconds
+  numberOfRounds: number;
+  utilityGain: number;
+  stakeholderSatisfaction: number | null; // 1..5
+  resolutionSuccessRate: number; // %
+  resolutionStability: number; // %
+  decisionConsistency: number; // %
+};
 
-const FinalizePage: React.FC = () => {
-  /* ----------------------- table + query state ----------------------- */
-  const [rows, setRows] = useState<ProposalRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+type SelectOption = { value: string; label: string };
 
-  const [query, setQuery] = useState<string>('');
-  const [status, setStatus] = useState<Status | 'all'>('pending');
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+/* ────────────────────────────── Helpers ─────────────────────────────── */
 
-  const [loading, setLoading] = useState(false);
-  const [rowLoadingId, setRowLoadingId] = useState<string | null>(null);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+const isFinalized = (status?: string) => {
+  const s = (status || "").toLowerCase();
+  return (
+    s === "finalized" ||
+    s === "final" ||
+    s === "completed" ||
+    s === "closed" ||
+    s.includes("final")
+  );
+};
 
-  /* ---------------- preview drawer (single artifact) ---------------- */
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewTitle, setPreviewTitle] = useState('');
-  const [previewText, setPreviewText] = useState<string>('');
-  const [previewLoading, setPreviewLoading] = useState(false);
+const safeAvg = (arr: (number | null | undefined)[]) => {
+  const vals = arr.map((x) => (typeof x === "number" ? x : NaN)).filter((x) => !Number.isNaN(x));
+  if (!vals.length) return null;
+  const sum = vals.reduce((a, b) => a + b, 0);
+  return sum / vals.length;
+};
 
-  /* ------------------------ consolidated opts ----------------------- */
-  const [conTopicKey, setConTopicKey] = useState<string>('');
-  const [conRange, setConRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+const pct = (v?: number | null) => (typeof v === "number" ? Math.max(0, Math.min(100, v)) : 0);
 
-  const [conFormat, setConFormat] = useState<'srs' | 'plain'>('srs');
-  const [conOutput, setConOutput] = useState<'md' | 'docx' | 'pdf'>('md');
-  const [conPolish, setConPolish] = useState<'none' | 'md' | 'gemini'>('none');
-
-  const [conPreviewOpen, setConPreviewOpen] = useState(false);
-  const [conPreviewText, setConPreviewText] = useState('');
-  const [conLoading, setConLoading] = useState(false);
-
-  /* --------------------------- query params ------------------------- */
-  const apiParams = useMemo(() => {
-    const params: Record<string, any> = {
-      q: query || undefined,
-      status: status === 'all' ? undefined : status,
-      page,
-      limit: pageSize,
-    };
-    if (dateRange?.[0]) params.since = dateRange[0]!.toISOString();
-    if (dateRange?.[1]) params.until = dateRange[1]!.toISOString();
-    return params;
-  }, [query, status, page, pageSize, dateRange]);
-
-  /* ----------------------------- load data -------------------------- */
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchAdminProposals(apiParams);
-      setRows(
-        (data.proposals || []).map((p) => ({
-          _id: p._id,
-          title: p.title,
-          status: (p.status as Status) || 'pending',
-          negotiationId: p.negotiationId ?? null,
-          submitter: p.submitter || null,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
-        })),
-      );
-      setTotal(data.total ?? 0);
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to load proposals.');
-    } finally {
-      setLoading(false);
+const toCsv = (rows: EvalRow[]) => {
+  const headers = [
+    "negotiationId",
+    "proposalTitles",
+    "timeToConsensus",
+    "numberOfRounds",
+    "utilityGain",
+    "stakeholderSatisfaction",
+    "resolutionSuccessRate",
+    "resolutionStability",
+    "decisionConsistency",
+  ];
+  const esc = (s: any) => {
+    const str = s == null ? "" : String(s);
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return `"${str.replace(/"/g, '""')}"`;
     }
-  }, [apiParams]);
+    return str;
+  };
+  const lines = [headers.join(",")].concat(
+    rows.map((r) =>
+      [
+        r.negotiationId,
+        r.proposalTitles ?? "",
+        r.timeToConsensus ?? "",
+        r.numberOfRounds ?? "",
+        r.utilityGain ?? "",
+        r.stakeholderSatisfaction ?? "",
+        r.resolutionSuccessRate ?? "",
+        r.resolutionStability ?? "",
+        r.decisionConsistency ?? "",
+      ]
+        .map(esc)
+        .join(",")
+    )
+  );
+  return lines.join("\n");
+};
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+const tsStamp = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(
+    d.getMinutes()
+  )}-${p(d.getSeconds())}`;
+};
+
+/* ────────────────────────────── Component ───────────────────────────── */
+
+const EvaluationReportPage: React.FC = () => {
+  const [proposals, setProposals] = useState<UIProposal[]>([]);
+  const [allEvaluations, setAllEvaluations] = useState<EvalRow[]>([]);
+  const [selectedNegotiationId, setSelectedNegotiationId] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<EvaluationMetrics | null>(null);
+
+  const [loadingProposals, setLoadingProposals] = useState<boolean>(true);
+  const [loadingAllEvals, setLoadingAllEvals] = useState<boolean>(true);
+  const [loadingMetrics, setLoadingMetrics] = useState<boolean>(false);
+  const [downloading, setDownloading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ttcMax, setTtcMax] = useState<number>(600); // for bar normalization (seconds)
+
+  const { message } = App.useApp();
+
+  const fetchProposals = useCallback(async () => {
+    try {
+      setLoadingProposals(true);
+      setError(null);
+      const fetched = (await getAllProposals()) as UIProposal[];
+      setProposals(fetched || []);
+    } catch (err: any) {
+      const msg = err?.message || "Failed to fetch proposals.";
+      setError(msg);
+      message.error(msg);
+    } finally {
+      setLoadingProposals(false);
+    }
+  }, [message]);
+
+  const fetchAllEvaluations = useCallback(async () => {
+    try {
+      setLoadingAllEvals(true);
+      setError(null);
+      // Prefer the aggregate endpoint which returns a list
+      const { data } = await api.get<{ evaluations: EvalRow[] }>("/evaluation", {
+        headers: { "Cache-Control": "no-cache" },
+      });
+      setAllEvaluations(data?.evaluations || []);
+    } catch (err: any) {
+      // best-effort: keep UI functional without global table
+      setAllEvaluations([]);
+    } finally {
+      setLoadingAllEvals(false);
+    }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    (async () => {
+      await fetchProposals();
+      await fetchAllEvaluations();
+    })();
+  }, [fetchProposals, fetchAllEvaluations]);
 
-  /* -------------------------------- actions ------------------------- */
-  const doFinalize = async (proposalId: string) => {
-    try {
-      setRowLoadingId(proposalId);
-      const res = await finalizeProposal(proposalId, { idempotencyKey: crypto.randomUUID() });
-      if (res.success) {
-        message.success('Finalized successfully.');
-        setRows((prev) =>
-          prev.map((r) =>
-            r._id === proposalId
-              ? {
-                  ...r,
-                  status: 'finalized',
-                  negotiationId:
-                    res.finalProposal?.negotiationId || r.negotiationId || res.finalProposal?._id,
-                }
-              : r,
-          ),
-        );
-      } else {
-        message.warning(res.message || 'Finalize returned no success flag.');
-      }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to finalize.');
-    } finally {
-      setRowLoadingId(null);
-    }
-  };
+  const finalizedOptions = useMemo<SelectOption[]>(() => {
+    const eligible = (proposals || []).filter((p) => isFinalized(p.status) && !!p?.negotiationId);
+    return eligible.map((p) => ({
+      value: String(p.negotiationId),
+      label: p.title || `Negotiation ${String(p.negotiationId).slice(-6)}`,
+    }));
+  }, [proposals]);
 
-  const doBatchFinalize = async () => {
-    if (!selectedRowKeys.length) return;
-    const ids = selectedRowKeys as string[];
-    const idempotencyBase = crypto.randomUUID();
+  const fallbackOptions = useMemo<SelectOption[]>(() => {
+    if (!allEvaluations?.length) return [];
+    return allEvaluations.map((e) => ({
+      value: e.negotiationId,
+      label: e.proposalTitles || `Negotiation ${e.negotiationId.slice(-6)}`,
+    }));
+  }, [allEvaluations]);
 
-    const loadingKey = 'batchFinalize';
-    message.loading({ key: loadingKey, content: 'Finalizing selected proposals…' });
+  const selectOptions: SelectOption[] =
+    finalizedOptions.length > 0 ? finalizedOptions : fallbackOptions;
+  const hasOptions = selectOptions.length > 0;
 
-    const results = await Promise.allSettled(
-      ids.map((id, i) => finalizeProposal(id, { idempotencyKey: `${idempotencyBase}:${i}` })),
-    );
-
-    const ok = results.filter((r) => r.status === 'fulfilled' && (r as any).value?.success).length;
-    const fail = results.length - ok;
-
-    await load();
-    setSelectedRowKeys([]);
-
-    if (fail === 0) {
-      message.success({ key: loadingKey, content: `Finalized ${ok} proposals.` });
-    } else {
-      message.warning({ key: loadingKey, content: `Finalized ${ok}; ${fail} failed.` });
-    }
-  };
-
-  const previewArtifact = async (record: ProposalRow) => {
-    if (!record.negotiationId) {
-      message.info('No artifact yet. Finalize first to generate a final text.');
+  const handleSelect = async (negotiationId?: string) => {
+    if (!negotiationId) {
+      setSelectedNegotiationId(null);
+      setMetrics(null);
+      setError(null);
       return;
     }
-    setPreviewOpen(true);
-    setPreviewLoading(true);
-    setPreviewTitle(`${record.title} — Final Artifact`);
+    setSelectedNegotiationId(negotiationId);
+    setMetrics(null);
+    setError(null);
+
     try {
-      const txt = await getFinalArtifactText(record.negotiationId);
-      setPreviewText(txt || '(empty)');
+      setLoadingMetrics(true);
+      const fetched = await getEvaluationMetrics(negotiationId);
+      setMetrics(fetched);
     } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to fetch artifact.');
+      const msg = err?.message || "Failed to fetch evaluation metrics.";
+      setError(msg);
+      message.error(msg);
     } finally {
-      setPreviewLoading(false);
+      setLoadingMetrics(false);
     }
   };
 
-  const downloadArtifact = async (record: ProposalRow) => {
-    if (!record.negotiationId) {
-      message.info('No artifact yet. Finalize first.');
+  const handleDownloadFull = async () => {
+    try {
+      setDownloading(true);
+      message.loading({ content: "Preparing full report…", key: "dl", duration: 0 });
+      await downloadEvaluationReport(); // server CSV
+      message.success({ content: "Full report download started!", key: "dl", duration: 2 });
+    } catch (err: any) {
+      message.error({ content: err?.message || "Failed to download report.", key: "dl" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadVisible = () => {
+    if (!allEvaluations?.length) {
+      message.info("No evaluations to export.");
       return;
     }
-    try {
-      await downloadFinalArtifact(record.negotiationId);
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to download artifact.');
-    }
+    const csv = toCsv(allEvaluations);
+    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `evaluations_visible_${tsStamp()}.csv`);
   };
 
-  /* --------------------------- consolidated ------------------------- */
-  const currentFilters = useMemo(
-    () => ({
-      topicKey: conTopicKey || undefined,
-      since: conRange?.[0]?.toISOString(),
-      until: conRange?.[1]?.toISOString(),
-    }),
-    [conTopicKey, conRange],
-  );
+  /* ──────────────── Aggregates across all evaluations (KPI cards) ──────────────── */
 
-  const doDownloadConsolidated = async () => {
-    setConLoading(true);
-    try {
-      const res = await exportConsolidated({
-        filters: currentFilters,
-        format: conFormat,
-        output: conOutput,
-        polish: conPolish === 'none' ? undefined : conPolish,
-        download: true,
-      });
-      if (res?.filename) message.success(`Exported ${res.filename}`);
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to export consolidated SRS.');
-    } finally {
-      setConLoading(false);
+  const kpis = useMemo(() => {
+    if (!allEvaluations?.length) {
+      return {
+        avgTtc: null,
+        avgRounds: null,
+        avgUtility: null,
+        avgSss: null,
+        avgSuccess: null,
+        avgStability: null,
+        avgConsistency: null,
+        count: 0,
+      };
     }
-  };
+    return {
+      avgTtc: safeAvg(allEvaluations.map((e) => e.timeToConsensus)),
+      avgRounds: safeAvg(allEvaluations.map((e) => e.numberOfRounds)),
+      avgUtility: safeAvg(allEvaluations.map((e) => e.utilityGain)),
+      avgSss: safeAvg(allEvaluations.map((e) => e.stakeholderSatisfaction)),
+      avgSuccess: safeAvg(allEvaluations.map((e) => e.resolutionSuccessRate)),
+      avgStability: safeAvg(allEvaluations.map((e) => e.resolutionStability)),
+      avgConsistency: safeAvg(allEvaluations.map((e) => e.decisionConsistency)),
+      count: allEvaluations.length,
+    };
+  }, [allEvaluations]);
 
-  const doPreviewConsolidated = async () => {
-    setConPreviewOpen(true);
-    setConLoading(true);
-    try {
-      if (conFormat === 'plain') {
-        const txt = await getConsolidatedMarkdownText(currentFilters, { polish: undefined });
-        setConPreviewText(txt);
-        message.info('Preview shows SRS markdown. Use export to get plain/DOCX/PDF.');
-      } else {
-        const txt = await getConsolidatedMarkdownText(currentFilters, {
-          polish: conPolish === 'none' ? undefined : conPolish,
-        });
-        setConPreviewText(txt);
-      }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to preview consolidated SRS.');
-    } finally {
-      setConLoading(false);
-    }
-  };
+  /* ────────────────────── Table of all evaluations ───────────────────── */
 
-  /* --------------------------- table columns ------------------------ */
   const columns = [
+    { title: "Negotiation", dataIndex: "negotiationId", key: "negotiationId", width: 220 },
+    { title: "Proposal(s)", dataIndex: "proposalTitles", key: "proposalTitles", ellipsis: true },
     {
-      title: 'Proposal ID',
-      dataIndex: '_id',
-      key: '_id',
-      width: 260,
-      ellipsis: true,
-      render: (id: string) => <Text code copyable>{id}</Text>,
-    },
-    {
-      title: 'Title',
-      dataIndex: 'title',
-      key: 'title',
-      ellipsis: true,
-      render: (t: string) => <Text strong>{t}</Text>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
+      title: "TTC (sec)",
+      dataIndex: "timeToConsensus",
+      key: "timeToConsensus",
       width: 140,
-      render: (s: Status) => <StatusTag status={s} />,
-      filters: [
-        { text: 'Pending', value: 'pending' },
-        { text: 'Processed', value: 'processed' },
-        { text: 'Negotiating', value: 'negotiating' },
-        { text: 'Finalized', value: 'finalized' },
-      ],
-      onFilter: (value: any, r: ProposalRow) => r.status === value,
-    },
-    {
-      title: 'Negotiation',
-      dataIndex: 'negotiationId',
-      key: 'negotiationId',
-      width: 260,
-      ellipsis: true,
-      render: (nid?: string) => (nid ? <Text code copyable>{nid}</Text> : <Text type="secondary">—</Text>),
-    },
-    {
-      title: 'Submitter',
-      dataIndex: 'submitter',
-      key: 'submitter',
-      width: 260,
-      ellipsis: true,
-      render: (u: ProposalRow['submitter']) =>
-        u ? (
-          <span>
-            <Text>{u.name || 'User'}</Text>
-            {u.email ? <Text type="secondary"> — {u.email}</Text> : null}
-          </span>
-        ) : (
-          <Text type="secondary">—</Text>
-        ),
-    },
-    {
-      title: 'Updated',
-      dataIndex: 'updatedAt',
-      key: 'updatedAt',
-      width: 180,
-      render: (d?: string) => (d ? dayjs(d).format('YYYY-MM-DD HH:mm') : '—'),
-      sorter: (a: ProposalRow, b: ProposalRow) =>
-        dayjs(a.updatedAt || 0).valueOf() - dayjs(b.updatedAt || 0).valueOf(),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      fixed: 'right' as const,
-      width: 320,
-      render: (_: any, record: ProposalRow) => {
-        const canDownload = !!record.negotiationId;
-        return (
-          <Space>
-            <Popconfirm
-              title="Finalize this proposal?"
-              okText="Finalize"
-              okButtonProps={{ type: 'primary' }}
-              onConfirm={() => doFinalize(record._id)}
-              disabled={record.status === 'finalized'}
-            >
-              <Button
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                loading={rowLoadingId === record._id}
-                disabled={record.status === 'finalized'}
-              >
-                Finalize
-              </Button>
-            </Popconfirm>
-
-            <Tooltip title={canDownload ? 'Preview final text' : 'No final text yet'}>
-              <Button icon={<EyeOutlined />} onClick={() => previewArtifact(record)} disabled={!canDownload}>
-                Preview
-              </Button>
-            </Tooltip>
-
-            <Tooltip title={canDownload ? 'Download .txt' : 'No final text yet'}>
-              <Button icon={<FileTextOutlined />} onClick={() => downloadArtifact(record)} disabled={!canDownload}>
-                Download
-              </Button>
-            </Tooltip>
+      render: (v: number | null) =>
+        typeof v === "number" ? (
+          <Space size="small">
+            <Text>{v}</Text>
+            <Progress
+              percent={pct((v / (ttcMax || 1)) * 100)}
+              size="small"
+              showInfo={false}
+              style={{ width: 90 }}
+            />
           </Space>
-        );
-      },
+        ) : (
+          "N/A"
+        ),
+      sorter: (a: EvalRow, b: EvalRow) => (a.timeToConsensus || 0) - (b.timeToConsensus || 0),
+    },
+    {
+      title: "Rounds",
+      dataIndex: "numberOfRounds",
+      key: "numberOfRounds",
+      width: 120,
+      render: (v: number) => (
+        <Space size="small">
+          <Text>{v}</Text>
+          <Progress percent={pct((v / 10) * 100)} size="small" showInfo={false} style={{ width: 90 }} />
+        </Space>
+      ),
+      sorter: (a: EvalRow, b: EvalRow) => a.numberOfRounds - b.numberOfRounds,
+    },
+    {
+      title: "Utility Gain",
+      dataIndex: "utilityGain",
+      key: "utilityGain",
+      width: 140,
+      render: (v: number) => <Text>{typeof v === "number" ? v.toFixed(3) : "N/A"}</Text>,
+      sorter: (a: EvalRow, b: EvalRow) => a.utilityGain - b.utilityGain,
+    },
+    {
+      title: "Satisfaction",
+      dataIndex: "stakeholderSatisfaction",
+      key: "stakeholderSatisfaction",
+      width: 150,
+      render: (v: number | null) =>
+        typeof v === "number" ? (
+          <Space size="small">
+            <Text>{v.toFixed(2)} / 5</Text>
+            <Progress percent={pct((v / 5) * 100)} size="small" showInfo={false} style={{ width: 90 }} />
+          </Space>
+        ) : (
+          "N/A"
+        ),
+      sorter: (a: EvalRow, b: EvalRow) => (a.stakeholderSatisfaction || 0) - (b.stakeholderSatisfaction || 0),
+    },
+    {
+      title: "Success %",
+      dataIndex: "resolutionSuccessRate",
+      key: "resolutionSuccessRate",
+      width: 130,
+      render: (v: number) => <Progress percent={pct(v)} size="small" />,
+      sorter: (a: EvalRow, b: EvalRow) => a.resolutionSuccessRate - b.resolutionSuccessRate,
+    },
+    {
+      title: "Stability %",
+      dataIndex: "resolutionStability",
+      key: "resolutionStability",
+      width: 130,
+      render: (v: number) => <Progress percent={pct(v)} size="small" />,
+      sorter: (a: EvalRow, b: EvalRow) => a.resolutionStability - b.resolutionStability,
+    },
+    {
+      title: "Consistency %",
+      dataIndex: "decisionConsistency",
+      key: "decisionConsistency",
+      width: 140,
+      render: (v: number) => <Progress percent={pct(v)} size="small" />,
+      sorter: (a: EvalRow, b: EvalRow) => a.decisionConsistency - b.decisionConsistency,
     },
   ];
 
+  /* ────────────────────────────── UI Blocks ───────────────────────────── */
+
+  const renderSelectedMetrics = () => {
+    if (loadingMetrics) {
+      return (
+        <div className="text-center py-20">
+          <Spin size="large" />
+          <Paragraph className="mt-4 text-gray-500">Loading Evaluation Metrics...</Paragraph>
+        </div>
+      );
+    }
+
+    if (!selectedNegotiationId) {
+      return (
+        <div className="text-center py-16">
+          <Empty
+            description={
+              <span className="text-gray-500">
+                {hasOptions
+                  ? "Please select a proposal to view its evaluation metrics."
+                  : "No finalized proposals are available for evaluation yet."}
+              </span>
+            }
+          />
+        </div>
+      );
+    }
+
+    if (!metrics) return null;
+
+    const m = metrics;
+    const ttcPct = m.timeToConsensus ? Math.min(100, (m.timeToConsensus / (ttcMax || 1)) * 100) : 0;
+
+    return (
+      <>
+        <Row gutter={[24, 24]}>
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic
+                title="Time to Consensus (sec)"
+                value={m.timeToConsensus ?? "N/A"}
+                prefix={<ClockCircleOutlined />}
+              />
+              <Progress className="mt-2" percent={pct(ttcPct)} showInfo={false} />
+              <div className="text-xs text-gray-500 mt-1">Normalized by TTC max: {ttcMax}s</div>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic title="Negotiation Rounds" value={m.numberOfRounds} prefix={<SyncOutlined />} />
+              <Progress className="mt-2" percent={pct((m.numberOfRounds / 10) * 100)} showInfo={false} />
+              <div className="text-xs text-gray-500 mt-1">Scale heuristic: 10 rounds</div>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic title="Utility Gain" value={m.utilityGain} precision={3} prefix={<ArrowUpOutlined />} />
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic
+                title="Stakeholder Satisfaction"
+                value={m.stakeholderSatisfaction ?? "N/A"}
+                precision={2}
+                prefix={<SmileOutlined />}
+                suffix="/ 5"
+              />
+              <Progress
+                className="mt-2"
+                percent={pct(((m.stakeholderSatisfaction || 0) / 5) * 100)}
+                showInfo={false}
+              />
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic
+                title="Resolution Success Rate"
+                value={m.resolutionSuccessRate}
+                suffix="%"
+                prefix={<CheckSquareOutlined />}
+              />
+              <Progress className="mt-2" percent={pct(m.resolutionSuccessRate)} showInfo />
+            </Card>
+          </Col>
+
+          <Col xs={24} sm={12} lg={8}>
+            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+              <Statistic
+                title="Decision Consistency"
+                value={m.decisionConsistency}
+                suffix="%"
+                prefix={<LikeOutlined />}
+              />
+              <Progress className="mt-2" percent={pct(m.decisionConsistency)} showInfo />
+            </Card>
+          </Col>
+        </Row>
+      </>
+    );
+  };
+
+  const formulas = (
+    <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{`Formulas (notation shown for clarity):
+
+1) Time to consensus (TTC)
+   TTC = t_final - t_start  (seconds)
+
+2) Number of negotiation rounds (NRC)
+   NRC = total rounds executed
+
+3) Utility gain (UG)
+   UG = (U_final - U_initial) / max( |U_initial|, 1 )
+
+4) Stakeholder satisfaction (SSS)
+   SSS = mean_i ( rating_i ), typically on 1..5 scale
+
+5) Resolution success rate (RSR)
+   RSR (%) = 100 * (#finalized) / (#total)
+
+6) Resolution stability (RST)
+   RST (%) = 100 * ( #agreements not reopened in window ) / (#agreements in window)
+
+7) Decision consistency (DC)
+   DC (%) = 100 * (#decisions aligned with preferences) / (#decisions)
+`}</pre>
+  );
+
   return (
-    <div>
-      {/* Header */}
-      <Row justify="space-between" align="middle" gutter={[16, 16]}>
-        <Col>
-          <Space direction="vertical" size={0}>
-            <Title level={3} style={{ margin: 0 }}>
-              Finalize Proposals
-            </Title>
-            <Text type="secondary">
-              Run single or batch finalization, preview artifacts, and export consolidated, IEEE-style SRS deliverables.
-            </Text>
-          </Space>
-        </Col>
-        <Col>
-          <Space wrap>
-            <Tooltip title="Refresh list">
-              <Button icon={<ReloadOutlined />} onClick={load} />
-            </Tooltip>
-            <Popconfirm
-              title={`Finalize ${selectedRowKeys.length} selected proposals?`}
-              okText="Finalize"
-              onConfirm={doBatchFinalize}
-              disabled={!selectedRowKeys.length}
-            >
-              <Badge count={selectedRowKeys.length || 0} size="small" offset={[6, -2]}>
-                <Button type="primary" icon={<CheckCircleOutlined />} disabled={!selectedRowKeys.length}>
-                  Finalize Selected
+    <div className="p-6 bg-gray-50 min-h-screen font-inter">
+      <Title level={2} className="text-gray-800 mb-2 flex items-center">
+        <BarChartOutlined className="mr-3 text-blue-600" /> Evaluation Reports
+      </Title>
+      <Paragraph type="secondary" className="text-gray-600 mb-8 max-w-3xl">
+        Analyze the performance and effectiveness of the negotiation process for finalized proposals.
+      </Paragraph>
+
+      {/* Controls */}
+      <Card bordered={false} className="rounded-lg shadow-md">
+        <Row justify="space-between" align="middle" gutter={[16, 16]}>
+          <Col xs={24} md={16} lg={12}>
+            <Select<string>
+              showSearch
+              allowClear
+              value={selectedNegotiationId ?? undefined}
+              placeholder={
+                loadingProposals
+                  ? "Loading proposals..."
+                  : hasOptions
+                  ? "Select a finalized proposal"
+                  : "No eligible finalized proposals found"
+              }
+              className="w-full"
+              onChange={(v) => handleSelect(v)}
+              options={selectOptions}
+              optionFilterProp="label"
+              loading={loadingProposals}
+              disabled={loadingProposals || !hasOptions}
+              notFoundContent={loadingProposals ? <Spin size="small" /> : "No eligible finalized proposals"}
+            />
+          </Col>
+          <Col xs={24} md={8} lg={12} className="text-right">
+            <Row gutter={[8, 8]} justify="end">
+              <Col>
+                <Space>
+                  <Tooltip title="Normalization cap for TTC progress bars (seconds)">
+                    <InfoCircleOutlined />
+                  </Tooltip>
+                  <span>TTC max:</span>
+                  <InputNumber
+                    min={60}
+                    max={7200}
+                    step={30}
+                    value={ttcMax}
+                    onChange={(v) => setTtcMax(Number(v || 0))}
+                    style={{ width: 110 }}
+                  />
+                </Space>
+              </Col>
+              <Col>
+                <Button icon={<ReloadOutlined />} onClick={() => { fetchProposals(); fetchAllEvaluations(); }}>
+                  Refresh
                 </Button>
-              </Badge>
-            </Popconfirm>
-          </Space>
-        </Col>
-      </Row>
+              </Col>
+              <Col>
+                <Button type="default" icon={<DownloadOutlined />} onClick={handleDownloadVisible}>
+                  Download Visible (CSV)
+                </Button>
+              </Col>
+              <Col>
+                <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownloadFull} loading={downloading}>
+                  Download Full Report (CSV)
+                </Button>
+              </Col>
+            </Row>
+          </Col>
+        </Row>
+      </Card>
 
+      {/* KPI summary (averages across all evaluations) */}
       <Divider />
+      <Row gutter={[24, 24]}>
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. TTC (sec)" value={kpis.avgTtc ?? "N/A"} precision={kpis.avgTtc ? 1 : 0} prefix={<ClockCircleOutlined />} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. Rounds" value={kpis.avgRounds ?? "N/A"} precision={kpis.avgRounds ? 1 : 0} prefix={<SyncOutlined />} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. Utility Gain" value={kpis.avgUtility ?? "N/A"} precision={kpis.avgUtility ? 3 : 0} prefix={<ArrowUpOutlined />} />
+          </Card>
+        </Col>
 
-      {/* Filters */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-        <Col xs={24} md={8}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Search title, id, submitter…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onPressEnter={() => {
-              setPage(1);
-              load();
-            }}
-          />
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. Satisfaction" value={kpis.avgSss ?? "N/A"} precision={2} prefix={<SmileOutlined />} suffix="/ 5" />
+            <Progress className="mt-2" percent={pct(((kpis.avgSss || 0) / 5) * 100)} showInfo={false} />
+          </Card>
         </Col>
-        <Col xs={24} md={6}>
-          <Select<Status | 'all'>
-            value={status}
-            onChange={(v) => {
-              setStatus(v);
-              setPage(1);
-            }}
-            style={{ width: '100%' }}
-            options={[
-              { value: 'all', label: 'All statuses' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'processed', label: 'Processed' },
-              { value: 'negotiating', label: 'Negotiating' },
-              { value: 'finalized', label: 'Finalized' },
-            ]}
-          />
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. Success Rate" value={kpis.avgSuccess ?? "N/A"} suffix="%" prefix={<CheckSquareOutlined />} />
+            <Progress className="mt-2" percent={pct(kpis.avgSuccess || 0)} showInfo={false} />
+          </Card>
         </Col>
-        <Col xs={24} md={10}>
-          <RangePicker
-            allowEmpty={[true, true]}
-            value={dateRange as any}
-            onChange={(r) => {
-              setDateRange(r);
-              setPage(1);
-            }}
-            style={{ width: '100%' }}
-            showTime
-            placeholder={['Since', 'Until']}
-          />
+        <Col xs={24} sm={12} lg={8}>
+          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Statistic title="Avg. Consistency" value={kpis.avgConsistency ?? "N/A"} suffix="%" prefix={<LikeOutlined />} />
+            <Progress className="mt-2" percent={pct(kpis.avgConsistency || 0)} showInfo={false} />
+          </Card>
         </Col>
       </Row>
 
-      {/* Consolidated options */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-        <Col xs={24} md={8}>
-          <Input
-            allowClear
-            placeholder="Consolidated filter — topicKey (optional)"
-            value={conTopicKey}
-            onChange={(e) => setConTopicKey(e.target.value)}
+      {/* Selected negotiation metrics */}
+      <Divider />
+      {error && !metrics ? (
+        <Alert message="Error" description={error} type="error" showIcon className="mt-6 rounded-lg" />
+      ) : (
+        renderSelectedMetrics()
+      )}
+
+      {/* All evaluations table */}
+      <Divider />
+      <Card bordered={false} className="rounded-lg shadow-sm">
+        <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
+          <Col>
+            <Text strong>All Evaluations ({allEvaluations.length})</Text>
+          </Col>
+        </Row>
+        {loadingAllEvals ? (
+          <div className="text-center py-12">
+            <Spin size="large" />
+          </div>
+        ) : allEvaluations.length === 0 ? (
+          <Empty description="No evaluation records found." />
+        ) : (
+          <Table
+            rowKey={(r) => r.negotiationId}
+            dataSource={allEvaluations}
+            columns={columns as any}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: "max-content" }}
           />
-        </Col>
-        <Col xs={24} md={10}>
-          <RangePicker
-            allowEmpty={[true, true]}
-            value={conRange as any}
-            onChange={(r) => setConRange(r)}
-            style={{ width: '100%' }}
-            showTime
-            placeholder={['Consolidated since', 'Consolidated until']}
-          />
-        </Col>
-      </Row>
+        )}
+      </Card>
 
-      <Row gutter={[12, 12]} align="middle" style={{ marginBottom: 16 }}>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">Format</Text>
-            <Segmented
-              block
-              value={conFormat}
-              onChange={(v) => setConFormat(v as 'srs' | 'plain')}
-              options={[
-                { label: 'IEEE SRS', value: 'srs' },
-                { label: 'Plain List', value: 'plain' },
-              ]}
-            />
-          </Space>
-        </Col>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">Output</Text>
-            <Segmented
-              block
-              value={conOutput}
-              onChange={(v) => setConOutput(v as 'md' | 'docx' | 'pdf')}
-              options={[
-                { label: (<><FileMarkdownOutlined /> MD</>), value: 'md' },
-                { label: (<><FileWordOutlined /> DOCX</>), value: 'docx' },
-                { label: (<><FilePdfOutlined /> PDF</>), value: 'pdf' },
-              ]}
-            />
-          </Space>
-        </Col>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">
-              Polish <Tooltip title="Optional LLM polish for human-like tone. IDs & traceability are preserved."><ExperimentOutlined /></Tooltip>
-            </Text>
-            <Segmented
-              block
-              value={conPolish}
-              onChange={(v) => setConPolish(v as 'none' | 'md' | 'gemini')}
-              options={[
-                { label: 'None', value: 'none' },
-                { label: 'SRS text', value: 'md' },
-                { label: 'Gemini Polish', value: 'gemini' },
-              ]}
-            />
-          </Space>
-        </Col>
-      </Row>
-
-      <Row justify="end" style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Tooltip title="Preview SRS (Markdown)">
-            <Button onClick={doPreviewConsolidated} loading={conLoading} icon={<EyeOutlined />}>
-              Preview Consolidated
-            </Button>
-          </Tooltip>
-          <Tooltip title="Export with the chosen options">
-            <Button
-              type="primary"
-              icon={<CloudDownloadOutlined />}
-              onClick={doDownloadConsolidated}
-              loading={conLoading}
-            >
-              Export SRS
-            </Button>
-          </Tooltip>
-        </Space>
-      </Row>
-
-      {/* Table */}
-      <Table<ProposalRow>
-        rowKey="_id"
-        loading={loading}
-        dataSource={rows}
-        columns={columns as any}
-        sticky
-        pagination={{
-          current: page,
-          pageSize,
-          total,
-          showSizeChanger: true,
-          onChange: (p, ps) => {
-            setPage(p);
-            setPageSize(ps);
+      {/* Formulas / methodology */}
+      <Divider />
+      <Collapse
+        items={[
+          {
+            key: "formulas",
+            label: (
+              <Space>
+                <InfoCircleOutlined />
+                <span>Formulas & Methodology</span>
+              </Space>
+            ),
+            children: formulas,
           },
-        }}
-        locale={{
-          emptyText: (
-            <Empty description="No proposals found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ),
-        }}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-          getCheckboxProps: (record) => ({
-            disabled: record.status === 'finalized',
-          }),
-        }}
-        scroll={{ x: 1200 }}
+        ]}
       />
-
-      {/* Final artifact preview */}
-      <Drawer
-        title={previewTitle}
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        width={720}
-      >
-        {previewLoading ? (
-          <Text type="secondary">Loading…</Text>
-        ) : (
-          <>
-            <Paragraph>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{previewText}</pre>
-            </Paragraph>
-            <Divider />
-            <Text type="secondary">Plain-text export generated by the Finalization service.</Text>
-          </>
-        )}
-      </Drawer>
-
-      {/* Consolidated preview */}
-      <Drawer
-        title="Consolidated SRS (Markdown Preview)"
-        open={conPreviewOpen}
-        onClose={() => setConPreviewOpen(false)}
-        width={920}
-      >
-        {conLoading ? (
-          <Text type="secondary">Loading…</Text>
-        ) : (
-          <>
-            <Paragraph>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{conPreviewText}</pre>
-            </Paragraph>
-            <Divider />
-            <Space>
-              <Button icon={<DownloadOutlined />} onClick={doDownloadConsolidated}>
-                Export with Current Options
-              </Button>
-              <Text type="secondary">
-                Tip: Switch output to DOCX/PDF for a polished handout. Use “Polish” to improve readability (IDs stay intact).
-              </Text>
-            </Space>
-          </>
-        )}
-      </Drawer>
     </div>
   );
 };
 
-export default FinalizePage;
+export default EvaluationReportPage;

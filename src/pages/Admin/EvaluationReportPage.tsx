@@ -38,7 +38,6 @@ import type { Proposal } from "../../services/proposalService";
 import type { EvaluationMetrics } from "../../services/adminService";
 
 const { Title, Paragraph, Text } = Typography;
-const { Option } = Select;
 
 /* ───────────────────────────────── Types ───────────────────────────────── */
 
@@ -60,6 +59,8 @@ type EvalRow = {
   resolutionStability: number; // %
   decisionConsistency: number; // %
 };
+
+type SelectOption = { value: string; label: string };
 
 /* ────────────────────────────── Helpers ─────────────────────────────── */
 
@@ -197,7 +198,7 @@ const EvaluationReportPage: React.FC = () => {
     })();
   }, [fetchProposals, fetchAllEvaluations]);
 
-  const finalizedOptions = useMemo(() => {
+  const finalizedOptions = useMemo<SelectOption[]>(() => {
     const eligible = (proposals || []).filter((p) => isFinalized(p.status) && !!p?.negotiationId);
     return eligible.map((p) => ({
       value: String(p.negotiationId),
@@ -205,7 +206,7 @@ const EvaluationReportPage: React.FC = () => {
     }));
   }, [proposals]);
 
-  const fallbackOptions = useMemo(() => {
+  const fallbackOptions = useMemo<SelectOption[]>(() => {
     if (!allEvaluations?.length) return [];
     return allEvaluations.map((e) => ({
       value: e.negotiationId,
@@ -213,7 +214,8 @@ const EvaluationReportPage: React.FC = () => {
     }));
   }, [allEvaluations]);
 
-  const selectOptions = finalizedOptions.length > 0 ? finalizedOptions : fallbackOptions;
+  const selectOptions: SelectOption[] =
+    finalizedOptions.length > 0 ? finalizedOptions : fallbackOptions;
   const hasOptions = selectOptions.length > 0;
 
   const handleSelect = async (negotiationId?: string) => {
@@ -522,7 +524,7 @@ const EvaluationReportPage: React.FC = () => {
       <Card bordered={false} className="rounded-lg shadow-md">
         <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col xs={24} md={16} lg={12}>
-            <Select
+            <Select<string>
               showSearch
               allowClear
               value={selectedNegotiationId ?? undefined}
@@ -534,20 +536,13 @@ const EvaluationReportPage: React.FC = () => {
                   : "No eligible finalized proposals found"
               }
               className="w-full"
-              onChange={handleSelect}
+              onChange={(v) => handleSelect(v)}
+              options={selectOptions}
+              optionFilterProp="label"
               loading={loadingProposals}
               disabled={loadingProposals || !hasOptions}
               notFoundContent={loadingProposals ? <Spin size="small" /> : "No eligible finalized proposals"}
-              filterOption={(input, option) =>
-                (option?.children as string)?.toLowerCase()?.includes(input.toLowerCase())
-              }
-            >
-              {selectOptions.map((opt) => (
-                <Option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </Option>
-              ))}
-            </Select>
+            />
           </Col>
           <Col xs={24} md={8} lg={12} className="text-right">
             <Row gutter={[8, 8]} justify="end">
