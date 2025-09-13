@@ -15,8 +15,6 @@ import {
     Statistic,
     Typography,
     Alert,
-    Progress,
-    Tooltip,
     Badge
 } from 'antd';
 import {
@@ -28,26 +26,24 @@ import {
     DownloadOutlined,
     ReloadOutlined,
     EyeOutlined,
-    ExclamationCircleOutlined
 } from '@ant-design/icons';
-import { Bar, Line, Column } from '@ant-design/plots';
+import { Bar } from '@ant-design/plots';
 import { 
     getAllProposals,
     getAllUsers,
     runBenchmarking,
     getBenchmarkResults,
-    getBenchmarkAnalysis,
     getMethodComparison,
     getBenchmarkMetricsSummary,
     exportBenchmarkCSV
 } from '../../services/adminService';
-import type { BenchmarkResult, Proposal, AdminUser } from '../../services/adminService';
+import type { BenchmarkResult, AdminUser, Proposal } from '../../services/adminService';
 
 const { Title, Paragraph } = Typography;
 const { Option } = Select;
 
 const BenchmarkingPage: React.FC = () => {
-    const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
+    const [benchmarkResults] = useState<BenchmarkResult[]>([]);
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -122,7 +118,7 @@ const BenchmarkingPage: React.FC = () => {
     const handleRunBenchmark = async (values: any) => {
         try {
             setRunning(true);
-            const result = await runBenchmarking(values.proposalId, values.stakeholderIds, values.maxRounds);
+            await runBenchmarking(values.proposalId, values.stakeholderIds, values.maxRounds);
             message.success('Benchmarking completed successfully');
             setRunModalVisible(false);
             form.resetFields();
@@ -156,27 +152,6 @@ const BenchmarkingPage: React.FC = () => {
         }
     };
 
-    const getMethodColor = (method: string) => {
-        const colors = {
-            'Swing+RoundRobin+NBS': '#1890ff',
-            'AHP+Shapley': '#52c41a',
-            'AHP+Borda': '#faad14',
-            'AHP+TOPSIS': '#f5222d',
-            'AHP+KalaiSmorodinsky': '#722ed1',
-            'Conjoint+Shapley': '#13c2c2',
-            'Conjoint+Borda': '#eb2f96',
-            'Conjoint+TOPSIS': '#fa8c16',
-            'Conjoint+KalaiSmorodinsky': '#a0d911',
-            'BWS+Shapley': '#2f54eb',
-            'BWS+Borda': '#52c41a',
-            'BWS+TOPSIS': '#faad14',
-            'BWS+KalaiSmorodinsky': '#f5222d',
-            'DCE+Shapley': '#722ed1',
-            'DCE+Borda': '#13c2c2',
-            'DCE+TOPSIS': '#eb2f96'
-        };
-        return colors[method as keyof typeof colors] || '#1890ff';
-    };
 
     const columns = [
         {
@@ -261,15 +236,14 @@ const BenchmarkingPage: React.FC = () => {
         {
             title: 'Actions',
             key: 'actions',
-            render: (_, record: BenchmarkResult) => (
+            render: (_: any, record: BenchmarkResult) => (
                 <Space>
-                    <Tooltip title="View Details">
-                        <Button 
-                            icon={<EyeOutlined />} 
-                            size="small"
-                            onClick={() => handleViewDetails(record._id)}
-                        />
-                    </Tooltip>
+                    <Button 
+                        icon={<EyeOutlined />} 
+                        size="small"
+                        onClick={() => handleViewDetails(record._id)}
+                        title="View Details"
+                    />
                 </Space>
             ),
             width: 100
@@ -326,15 +300,7 @@ const BenchmarkingPage: React.FC = () => {
                                 xField="method"
                                 yField="avgTTC"
                                 height={300}
-                                color={(datum) => getMethodColor(datum.method)}
-                                tooltip={{
-                                    formatter: (datum) => {
-                                        return {
-                                            name: 'TTC (s)',
-                                            value: `${datum.avgTTC}s`
-                                        };
-                                    }
-                                }}
+                                color="#1890ff"
                             />
                         </Card>
                     </Col>

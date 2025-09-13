@@ -17,7 +17,6 @@ import {
     Alert,
     Progress,
     Tooltip,
-    Badge,
     List
 } from 'antd';
 import {
@@ -31,14 +30,13 @@ import {
     EyeOutlined,
     PlayCircleOutlined
 } from '@ant-design/icons';
-import { Bar, Pie, Gauge } from '@ant-design/plots';
+import { Pie } from '@ant-design/plots';
 import { 
     getAllProposals,
     analyzeFeasibility,
     getFeasibilityResults,
     getFeasibilitySummary,
     getCriticalFeasibilityIssues,
-    getFeasibilityRecommendations,
     exportFeasibilityCSV
 } from '../../services/adminService';
 import type { FeasibilityAnalysis, Proposal } from '../../services/adminService';
@@ -47,7 +45,7 @@ const { Title, Paragraph } = Typography;
 const { Option } = Select;
 
 const FeasibilityPage: React.FC = () => {
-    const [feasibilityAnalyses, setFeasibilityAnalyses] = useState<FeasibilityAnalysis[]>([]);
+    const [feasibilityAnalyses] = useState<FeasibilityAnalysis[]>([]);
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -100,7 +98,7 @@ const FeasibilityPage: React.FC = () => {
     const handleAnalyzeFeasibility = async (values: any) => {
         try {
             setAnalyzing(true);
-            const result = await analyzeFeasibility(
+            await analyzeFeasibility(
                 values.proposalId, 
                 values.analysisType, 
                 values.includeStakeholders,
@@ -156,7 +154,7 @@ const FeasibilityPage: React.FC = () => {
             high: <WarningOutlined />,
             critical: <ExclamationCircleOutlined />
         };
-        return icons[level as keyof typeof colors] || <InfoCircleOutlined />;
+        return icons[level as keyof typeof icons] || <InfoCircleOutlined />;
     };
 
     const columns = [
@@ -237,7 +235,7 @@ const FeasibilityPage: React.FC = () => {
         {
             title: 'Actions',
             key: 'actions',
-            render: (_, record: FeasibilityAnalysis) => (
+            render: (_: any, record: FeasibilityAnalysis) => (
                 <Space>
                     <Tooltip title="View Details">
                         <Button 

@@ -4,6 +4,9 @@ import api from "./api";
 import type { User } from "./authService";
 import type { Proposal } from "./proposalService";
 
+// Re-export Proposal type for admin usage
+export type { Proposal };
+
 /* =========================
    Types
    ========================= */
@@ -296,7 +299,6 @@ export const getComprehensiveDashboardStats = async (): Promise<AdminDashboardSt
     
     // Try to get additional metrics, but don't fail if they don't exist
     let negotiations: Negotiation[] = [];
-    let conflicts: any = null;
     let feedback: FeedbackAnalytics | null = null;
 
     try {
@@ -305,11 +307,6 @@ export const getComprehensiveDashboardStats = async (): Promise<AdminDashboardSt
       console.warn("Could not fetch negotiations:", error);
     }
 
-    try {
-      conflicts = await getConflictsAggregate();
-    } catch (error) {
-      console.warn("Could not fetch conflicts:", error);
-    }
 
     try {
       feedback = await getFeedbackAnalytics();

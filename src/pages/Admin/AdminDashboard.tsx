@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Statistic, Spin, Alert, Table, Tag, Button, Space, Progress, Tooltip, Badge } from 'antd';
+import { Row, Col, Card, Typography, Statistic, Spin, Alert, Table, Tag, Button, Space, Badge } from 'antd';
 import {
     FileDoneOutlined,
     TeamOutlined,
@@ -10,8 +10,6 @@ import {
     TrophyOutlined,
     BarChartOutlined,
     DownloadOutlined,
-    PlayCircleOutlined,
-    PauseCircleOutlined,
     ReloadOutlined,
     ExclamationCircleOutlined,
     CheckCircleTwoTone,
@@ -23,9 +21,6 @@ import {
     getAllProposals, 
     getAllNegotiations,
     getConflictsAggregate,
-    getFeedbackAnalytics,
-    getBenchmarkMetricsSummary,
-    getFeasibilitySummary,
     downloadAllProposals,
     exportBenchmarkCSV,
     exportFeasibilityCSV,
@@ -33,10 +28,7 @@ import {
 } from '../../services/adminService';
 import type { 
     AdminDashboardStats, 
-    Negotiation, 
-    Conflict,
-    FeedbackAnalytics,
-    BenchmarkResult
+    Negotiation
 } from '../../services/adminService';
 import type { Proposal } from '../../services/proposalService';
 import { Link } from 'react-router-dom';
@@ -48,9 +40,6 @@ const AdminDashboard: React.FC = () => {
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
     const [conflicts, setConflicts] = useState<any>(null);
-    const [feedback, setFeedback] = useState<FeedbackAnalytics | null>(null);
-    const [benchmarkMetrics, setBenchmarkMetrics] = useState<any>(null);
-    const [feasibilitySummary, setFeasibilitySummary] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -86,29 +75,6 @@ const AdminDashboard: React.FC = () => {
                     setConflicts(null);
                 }
 
-                try {
-                    const feedbackData = await getFeedbackAnalytics();
-                    setFeedback(feedbackData);
-                } catch (err) {
-                    console.warn("Could not fetch feedback:", err);
-                    setFeedback(null);
-                }
-
-                try {
-                    const benchmarkData = await getBenchmarkMetricsSummary();
-                    setBenchmarkMetrics(benchmarkData);
-                } catch (err) {
-                    console.warn("Could not fetch benchmark metrics:", err);
-                    setBenchmarkMetrics(null);
-                }
-
-                try {
-                    const feasibilityData = await getFeasibilitySummary();
-                    setFeasibilitySummary(feasibilityData);
-                } catch (err) {
-                    console.warn("Could not fetch feasibility summary:", err);
-                    setFeasibilitySummary(null);
-                }
 
             } catch (err: any) {
                 console.error("Failed to load admin dashboard data:", err);

@@ -12,7 +12,6 @@ import {
     Tabs,
     Spin,
     Alert,
-    Tooltip,
     Progress
 } from 'antd';
 import {
@@ -27,7 +26,6 @@ import {
     DownloadOutlined,
     ReloadOutlined,
     RiseOutlined,
-    FallOutlined
 } from '@ant-design/icons';
 import { 
     Bar, 
@@ -50,7 +48,7 @@ const { TabPane } = Tabs;
 
 const AnalyticsPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error] = useState<string | null>(null);
     const [dateRange, setDateRange] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<string>('all');
 
@@ -321,17 +319,6 @@ const AnalyticsPage: React.FC = () => {
                             <Card title="Success Rate" extra={<CheckCircleOutlined />}>
                                 <Liquid
                                     percent={0.892}
-                                    outline={{
-                                        border: 4,
-                                        distance: 8
-                                    }}
-                                    wave={{
-                                        length: 128
-                                    }}
-                                    statistic={{
-                                        title: 'Success Rate',
-                                        content: '89.2%'
-                                    }}
                                 />
                             </Card>
                         </Col>
@@ -358,11 +345,6 @@ const AnalyticsPage: React.FC = () => {
                                     xField="month"
                                     yField="satisfaction"
                                     height={300}
-                                    smooth
-                                    color="#52c41a"
-                                    areaStyle={{
-                                        fill: 'l(270) 0:#ffffff 0.5:#7ec2f3 1:#1890ff'
-                                    }}
                                 />
                             </Card>
                         </Col>

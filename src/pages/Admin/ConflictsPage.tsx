@@ -11,9 +11,6 @@ import {
     Statistic,
     Typography,
     Alert,
-    Progress,
-    Tooltip,
-    Badge,
     List,
     Select,
     Input,
@@ -27,10 +24,8 @@ import {
     SearchOutlined,
     ReloadOutlined,
     EyeOutlined,
-    BarChartOutlined,
-    FilterOutlined
 } from '@ant-design/icons';
-import { Bar, Pie, Line } from '@ant-design/plots';
+import { Bar, Pie } from '@ant-design/plots';
 import { 
     getAllNegotiations,
     getConflictsByNegotiation,
@@ -49,7 +44,6 @@ const ConflictsPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedConflict, setSelectedConflict] = useState<Conflict | null>(null);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const [aggregateData, setAggregateData] = useState<any>(null);
     const [selectedNegotiation, setSelectedNegotiation] = useState<string>('all');
     const [searchText, setSearchText] = useState<string>('');
     const [dateRange, setDateRange] = useState<any>(null);
@@ -63,13 +57,12 @@ const ConflictsPage: React.FC = () => {
             setLoading(true);
             setError(null);
             
-            const [negotiationsData, aggregateData] = await Promise.all([
+            const [negotiationsData] = await Promise.all([
                 getAllNegotiations(),
                 getConflictsAggregate().catch(() => null)
             ]);
             
             setNegotiations(negotiationsData);
-            setAggregateData(aggregateData);
             
             // Fetch conflicts for all negotiations
             const allConflicts: Conflict[] = [];
@@ -92,6 +85,7 @@ const ConflictsPage: React.FC = () => {
                         severity: 'high',
                         description: 'Conflicting requirements between stakeholders regarding user authentication method',
                         status: 'open',
+                        resolved: false,
                         detectedAt: new Date().toISOString(),
                         roundNumber: 2
                     },
@@ -102,6 +96,7 @@ const ConflictsPage: React.FC = () => {
                         severity: 'medium',
                         description: 'Disagreement on feature prioritization between development and business teams',
                         status: 'resolved',
+                        resolved: true,
                         detectedAt: new Date(Date.now() - 86400000).toISOString(),
                         resolvedAt: new Date().toISOString(),
                         roundNumber: 1
@@ -231,15 +226,14 @@ const ConflictsPage: React.FC = () => {
         {
             title: 'Actions',
             key: 'actions',
-            render: (_, record: Conflict) => (
+            render: (_: any, record: Conflict) => (
                 <Space>
-                    <Tooltip title="View Details">
-                        <Button 
-                            icon={<EyeOutlined />} 
-                            size="small"
-                            onClick={() => handleViewDetails(record)}
-                        />
-                    </Tooltip>
+                    <Button 
+                        icon={<EyeOutlined />} 
+                        size="small"
+                        onClick={() => handleViewDetails(record)}
+                        title="View Details"
+                    />
                 </Space>
             ),
             width: 100

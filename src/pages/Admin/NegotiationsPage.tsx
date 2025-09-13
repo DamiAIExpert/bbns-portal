@@ -6,9 +6,6 @@ import {
     Space, 
     Tag, 
     Modal, 
-    Form, 
-    Input, 
-    Select, 
     message, 
     Popconfirm, 
     Tooltip,
@@ -44,7 +41,6 @@ import {
 import type { Negotiation, Conflict, BenchmarkResult } from '../../services/adminService';
 
 const { Title, Paragraph } = Typography;
-const { Option } = Select;
 
 const NegotiationsPage: React.FC = () => {
     const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
@@ -79,20 +75,19 @@ const NegotiationsPage: React.FC = () => {
     const handleAction = async (action: string, negotiationId: string) => {
         try {
             setActionLoading(negotiationId);
-            let result;
             
             switch (action) {
                 case 'start':
-                    result = await startNegotiation(negotiationId);
+                    await startNegotiation(negotiationId);
                     break;
                 case 'finalize':
-                    result = await finalizeNegotiation(negotiationId);
+                    await finalizeNegotiation(negotiationId);
                     break;
                 case 'cancel':
-                    result = await cancelNegotiation(negotiationId);
+                    await cancelNegotiation(negotiationId);
                     break;
                 case 'reopen':
-                    result = await reopenNegotiation(negotiationId);
+                    await reopenNegotiation(negotiationId);
                     break;
                 default:
                     throw new Error('Invalid action');
@@ -235,7 +230,7 @@ const NegotiationsPage: React.FC = () => {
         {
             title: 'Actions',
             key: 'actions',
-            render: (_, record: Negotiation) => (
+            render: (_: any, record: Negotiation) => (
                 <Space>
                     <Tooltip title="View Details">
                         <Button 
