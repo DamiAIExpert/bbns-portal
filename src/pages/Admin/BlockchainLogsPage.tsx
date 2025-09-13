@@ -149,7 +149,17 @@ const BlockchainLogsPage: React.FC = () => {
 
       setLogs(norm);
     } catch (e: any) {
-      setError(e?.message || "Failed to fetch blockchain logs.");
+      console.warn("Failed to fetch blockchain logs:", e);
+      // Don't show error for rate limiting or network issues
+      if (e?.response?.status === 429 || e?.message?.includes('rate limit')) {
+        setError("Rate limited by blockchain provider. Please try again later.");
+      } else if (e?.message?.includes('network') || e?.message?.includes('timeout')) {
+        setError("Network error. Please check your connection and try again.");
+      } else {
+        setError(e?.message || "Failed to fetch blockchain logs.");
+      }
+      // Set empty logs instead of showing error
+      setLogs([]);
     } finally {
       setLoading(false);
     }

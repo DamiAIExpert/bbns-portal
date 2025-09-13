@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, App as AntApp } from 'antd';
 import { ThemeProvider } from 'styled-components';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // --- THEME CONFIGURATION ---
 const customTheme = {
@@ -38,7 +39,12 @@ import AdminProposalsPage from './pages/Admin/AdminProposalsPage';
 import AdminProposalDetailsPage from './pages/Admin/AdminProposalDetailsPage';
 import SettingsPage from './pages/Admin/SettingsPage';
 import BlockchainLogsPage from './pages/Admin/BlockchainLogsPage';
-import FinalizePage from './pages/Admin/FinalizePage'; // <-- NEW
+import FinalizePage from './pages/Admin/FinalizePage';
+import NegotiationsPage from './pages/Admin/NegotiationsPage';
+import BenchmarkingPage from './pages/Admin/BenchmarkingPage';
+import FeasibilityPage from './pages/Admin/FeasibilityPage';
+import ConflictsPage from './pages/Admin/ConflictsPage';
+import AnalyticsPage from './pages/Admin/AnalyticsPage';
 
 // --- PLACEHOLDER COMPONENTS for pages not yet built ---
 const ResetPasswordPage = () => <div style={{ padding: 40 }}>Reset Password Page</div>;
@@ -76,10 +82,19 @@ const App: React.FC = () => {
                 <Route path="/admin" element={<AdminLayout />}>
                   <Route index element={<Navigate to="dashboard" replace />} />
                   <Route path="dashboard" element={<AdminDashboard />} />
+                  <Route path="analytics" element={<AnalyticsPage />} />
                   <Route path="users" element={<UserManagementPage />} />
                   <Route path="proposals" element={<AdminProposalsPage />} />
                   <Route path="proposals/:proposalId" element={<AdminProposalDetailsPage />} />
-                  <Route path="finalize" element={<FinalizePage />} /> {/* NEW Finalize page */}
+                  <Route path="negotiations" element={<NegotiationsPage />} />
+                  <Route path="benchmarking" element={
+                    <ErrorBoundary>
+                      <BenchmarkingPage />
+                    </ErrorBoundary>
+                  } />
+                  <Route path="feasibility" element={<FeasibilityPage />} />
+                  <Route path="conflicts" element={<ConflictsPage />} />
+                  <Route path="finalize" element={<FinalizePage />} />
                   <Route path="evaluation" element={<EvaluationReportPage />} />
                   <Route path="blockchain-logs" element={<BlockchainLogsPage />} />
                   <Route path="settings" element={<SettingsPage />} />

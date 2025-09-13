@@ -18,6 +18,11 @@ export interface AdminDashboardStats {
   conflicts: number;
   totalProposals: number;
   totalVotes: number;
+  negotiationsInProgress: number;
+  finalizedNegotiations: number;
+  averageTTC: number;
+  averageSatisfaction: number;
+  recentActivity: number;
 }
 
 export interface EvaluationMetrics {
@@ -29,6 +34,190 @@ export interface EvaluationMetrics {
   resolutionSuccessRate: number;
   resolutionStability: number;
   decisionConsistency: number;
+}
+
+export interface Negotiation {
+  _id: string;
+  proposalId?: string;
+  proposals?: string[];
+  participants: string[];
+  status: 'pending' | 'in_progress' | 'finalized' | 'completed' | 'success' | 'partial' | 'impasse' | 'withdrawn' | 'canceled';
+  maxRounds: number;
+  startedAt?: string;
+  finalizedAt?: string;
+  metrics: {
+    ttcMs?: number;
+    ttcSeconds?: number;
+    rounds?: number;
+    utilityGain?: number;
+    resolutionSuccess?: boolean;
+    ssMean?: number;
+    ssN?: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Conflict {
+  _id: string;
+  negotiationId: string;
+  proposalId?: string;
+  type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  conflictingParties?: any;
+  resolution?: string;
+  resolved: boolean;
+  detectedAt: string;
+  resolvedAt?: string;
+  roundNumber?: number;
+  status: 'open' | 'resolved';
+}
+
+export interface BenchmarkResult {
+  _id: string;
+  negotiationId: string;
+  proposalId: string;
+  mainContribution: {
+    method: string;
+    ttcSeconds: number;
+    rounds: number;
+    resolutionSuccess: boolean;
+    ssMean: number;
+    ssN: number;
+    utilityGain: number;
+    conflictsCount: number;
+    conflictsResolved: number;
+    fairnessJain: number;
+    participationGini: number;
+  };
+  benchmarks: Array<{
+    method: string;
+    elicitationMethod: string;
+    decisionMethod: string;
+    ttcSeconds: number;
+    resolutionSuccess: boolean;
+  }>;
+  metrics: {
+    comparison: {
+      ttcComparison: {
+        mainTTC: number;
+        averageBenchmarkTTC: number;
+        fastestBenchmark: number;
+        slowestBenchmark: number;
+      };
+      resolutionSuccessComparison: {
+        mainSuccess: boolean;
+        benchmarkSuccessRate: number;
+        successfulBenchmarks: number;
+      };
+    };
+  };
+  stakeholderCount: number;
+  stakeholderRoles: string[];
+  blockchainAnchored: boolean;
+  blockchainTxHash?: string;
+  analysisComplete: boolean;
+  analysisNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeasibilityAnalysis {
+  _id: string;
+  proposalId: string;
+  negotiationId?: string;
+  analysisType: 'initial' | 'revision' | 'final';
+  overallFeasibility: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  dimensions: {
+    timeFeasibility: number;
+    costFeasibility: number;
+    complexityFeasibility: number;
+    resourceWaste: number;
+  };
+  conflicts: Array<{
+    type: string;
+    severity: string;
+    description: string;
+    stakeholders?: string[];
+  }>;
+  recommendations: string[];
+  stakeholderAnalysis: {
+    totalStakeholders: number;
+    stakeholderRoles: string[];
+    stakeholderConflicts: any[];
+    participationLevel: number;
+  };
+  wasteEvents: any[];
+  analysisNotes: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeedbackAnalytics {
+  summary: {
+    totalFeedback: number;
+    averageSatisfaction: number;
+    responseRate: number;
+  };
+  satisfactionAnalysis: {
+    overall: number;
+    process: number;
+    outcome: number;
+    fairness: number;
+    transparency: number;
+    efficiency: number;
+  };
+  qualityAnalysis: {
+    requirementQuality: number;
+    processEfficiency: number;
+    decisionQuality: number;
+    stakeholderEngagement: number;
+  };
+  expectationAnalysis: {
+    expectationGap: number;
+    timelineAccuracy: number;
+    outcomeAlignment: number;
+  };
+  roleAnalysis: {
+    [role: string]: {
+      count: number;
+      averageSatisfaction: number;
+      commonConcerns: string[];
+    };
+  };
+  trendAnalysis: {
+    satisfactionTrend: 'improving' | 'declining' | 'stable';
+    qualityTrend: 'improving' | 'declining' | 'stable';
+  };
+  recommendations: string[];
+}
+
+export interface ResearchData {
+  negotiationId: string;
+  roundRobinTurns: number;
+  swingWeightingAdjustments: number;
+  nashBargainingSessions: number;
+  conflictEvents: number;
+  stakeholderFeedback: number;
+  performanceMetrics: {
+    timeToConsensus: number;
+    negotiationRounds: number;
+    nashFairnessIndex: number;
+    utilityGain: number;
+    conflictResolutionRate: number;
+  };
+  benchmarkComparison: Array<{
+    method: string;
+    ttc: number;
+    rounds: number;
+    success: boolean;
+    ssMean: number;
+    utility: number;
+    fairness: number;
+  }>;
 }
 
 /** Flexible shape for blockchain logs (decoded args are optional) */
@@ -100,6 +289,79 @@ export const getAdminDashboardStats = async (): Promise<AdminDashboardStats> => 
   }
 };
 
+export const getComprehensiveDashboardStats = async (): Promise<AdminDashboardStats> => {
+  try {
+    // Get basic stats
+    const basicStats = await getAdminDashboardStats();
+    
+    // Try to get additional metrics, but don't fail if they don't exist
+    let negotiations: Negotiation[] = [];
+    let conflicts: any = null;
+    let feedback: FeedbackAnalytics | null = null;
+
+    try {
+      negotiations = await getAllNegotiations();
+    } catch (error) {
+      console.warn("Could not fetch negotiations:", error);
+    }
+
+    try {
+      conflicts = await getConflictsAggregate();
+    } catch (error) {
+      console.warn("Could not fetch conflicts:", error);
+    }
+
+    try {
+      feedback = await getFeedbackAnalytics();
+    } catch (error) {
+      console.warn("Could not fetch feedback:", error);
+    }
+
+    const negotiationsInProgress = negotiations.filter(n => 
+      ['pending', 'in_progress'].includes(n.status)
+    ).length;
+    
+    const finalizedNegotiations = negotiations.filter(n => 
+      ['finalized', 'completed', 'success'].includes(n.status)
+    ).length;
+
+    const averageTTC = negotiations.length > 0 
+      ? negotiations.reduce((sum, n) => sum + (n.metrics.ttcSeconds || 0), 0) / negotiations.length
+      : 0;
+
+    const averageSatisfaction = feedback?.summary?.averageSatisfaction || 0;
+
+    const recentActivity = negotiations.filter(n => {
+      const createdAt = new Date(n.createdAt);
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      return createdAt > oneWeekAgo;
+    }).length;
+
+    return {
+      ...basicStats,
+      negotiationsInProgress,
+      finalizedNegotiations,
+      averageTTC: Math.round(averageTTC * 100) / 100,
+      averageSatisfaction: Math.round(averageSatisfaction * 100) / 100,
+      recentActivity
+    };
+  } catch (error: any) {
+    console.error("Error fetching comprehensive dashboard stats:", error);
+    // Return basic stats even if comprehensive fails
+    return {
+      activeUsers: 0,
+      conflicts: 0,
+      totalProposals: 0,
+      totalVotes: 0,
+      negotiationsInProgress: 0,
+      finalizedNegotiations: 0,
+      averageTTC: 0,
+      averageSatisfaction: 0,
+      recentActivity: 0
+    };
+  }
+};
+
 /* =========================
    Users
    ========================= */
@@ -153,6 +415,415 @@ export const deleteUser = async (userId: string) => {
   } catch (error: any) {
     console.error("Error deleting user:", error);
     throw new Error(extractError(error, "Failed to delete user."));
+  }
+};
+
+/* =========================
+   Negotiations
+   ========================= */
+export const getAllNegotiations = async (): Promise<Negotiation[]> => {
+  try {
+    const res = await api.get<Negotiation[]>("/negotiation/all", {
+      headers: { "Cache-Control": "no-cache" },
+    });
+    return res.data || [];
+  } catch (error: any) {
+    console.error("Error fetching negotiations:", error);
+    throw new Error(extractError(error, "Failed to fetch negotiations."));
+  }
+};
+
+export const getNegotiationById = async (negotiationId: string): Promise<Negotiation> => {
+  try {
+    const res = await api.get<Negotiation>(`/negotiation/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching negotiation:", error);
+    throw new Error(extractError(error, "Failed to fetch negotiation details."));
+  }
+};
+
+export const startNegotiation = async (proposalId: string) => {
+  try {
+    const res = await api.post(`/negotiation/initiate/${proposalId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error starting negotiation:", error);
+    throw new Error(extractError(error, "Failed to start negotiation."));
+  }
+};
+
+export const finalizeNegotiation = async (negotiationId: string) => {
+  try {
+    const res = await api.post(`/negotiation/finalize/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error finalizing negotiation:", error);
+    throw new Error(extractError(error, "Failed to finalize negotiation."));
+  }
+};
+
+export const cancelNegotiation = async (negotiationId: string) => {
+  try {
+    const res = await api.post(`/negotiation/cancel/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error canceling negotiation:", error);
+    throw new Error(extractError(error, "Failed to cancel negotiation."));
+  }
+};
+
+export const reopenNegotiation = async (negotiationId: string) => {
+  try {
+    const res = await api.post(`/negotiation/reopen/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error reopening negotiation:", error);
+    throw new Error(extractError(error, "Failed to reopen negotiation."));
+  }
+};
+
+/* =========================
+   Conflicts
+   ========================= */
+export const getConflictsByNegotiation = async (negotiationId: string): Promise<Conflict[]> => {
+  try {
+    const res = await api.get<{ conflicts: Conflict[] }>(`/conflicts/${negotiationId}`);
+    return res.data.conflicts || [];
+  } catch (error: any) {
+    console.error("Error fetching conflicts:", error);
+    throw new Error(extractError(error, "Failed to fetch conflicts."));
+  }
+};
+
+export const getConflictsAggregate = async () => {
+  try {
+    const res = await api.get("/evaluation/conflicts/aggregate");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching conflict aggregate:", error);
+    throw new Error(extractError(error, "Failed to fetch conflict aggregate."));
+  }
+};
+
+/* =========================
+   Benchmarking
+   ========================= */
+export const runBenchmarking = async (proposalId: string, stakeholderIds: string[], maxRounds: number = 3): Promise<BenchmarkResult> => {
+  try {
+    const res = await api.post<BenchmarkResult>("/benchmarking/run", {
+      proposalId,
+      stakeholderIds,
+      maxRounds
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error running benchmarking:", error);
+    throw new Error(extractError(error, "Failed to run benchmarking."));
+  }
+};
+
+export const getBenchmarkResults = async (negotiationId: string): Promise<BenchmarkResult> => {
+  try {
+    const res = await api.get<BenchmarkResult>(`/benchmarking/results/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching benchmark results:", error);
+    throw new Error(extractError(error, "Failed to fetch benchmark results."));
+  }
+};
+
+export const getBenchmarkAnalysis = async (negotiationId: string) => {
+  try {
+    const res = await api.get(`/benchmarking/analysis/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching benchmark analysis:", error);
+    throw new Error(extractError(error, "Failed to fetch benchmark analysis."));
+  }
+};
+
+export const getMethodComparison = async () => {
+  try {
+    const res = await api.get("/benchmarking/methods/comparison");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching method comparison:", error);
+    throw new Error(extractError(error, "Failed to fetch method comparison."));
+  }
+};
+
+export const getBenchmarkMetricsSummary = async () => {
+  try {
+    const res = await api.get("/benchmarking/metrics/summary");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching benchmark metrics summary:", error);
+    throw new Error(extractError(error, "Failed to fetch benchmark metrics summary."));
+  }
+};
+
+export const exportBenchmarkCSV = async (negotiationId?: string): Promise<void> => {
+  let urlObj: string | null = null;
+  try {
+    const endpoint = negotiationId 
+      ? `/benchmarking/export/csv?negotiationId=${negotiationId}`
+      : "/benchmarking/export/csv";
+    
+    const res = await api.get(endpoint, { responseType: "blob" });
+    urlObj = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = urlObj;
+    link.setAttribute("download", `benchmark_results_${timestamp()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error: any) {
+    console.error("Error exporting benchmark CSV:", error);
+    throw new Error(extractError(error, "Failed to export benchmark CSV."));
+  } finally {
+    if (urlObj) window.URL.revokeObjectURL(urlObj);
+  }
+};
+
+/* =========================
+   Feasibility Analysis
+   ========================= */
+export const analyzeFeasibility = async (proposalId: string, analysisType: 'initial' | 'revision' | 'final' = 'initial', includeStakeholders: boolean = true, options: any = {}): Promise<FeasibilityAnalysis> => {
+  try {
+    const res = await api.post<FeasibilityAnalysis>(`/feasibility/analyze/${proposalId}`, {
+      analysisType,
+      includeStakeholders,
+      options
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error analyzing feasibility:", error);
+    throw new Error(extractError(error, "Failed to analyze feasibility."));
+  }
+};
+
+export const getFeasibilityResults = async (proposalId: string): Promise<FeasibilityAnalysis> => {
+  try {
+    const res = await api.get<FeasibilityAnalysis>(`/feasibility/results/${proposalId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching feasibility results:", error);
+    throw new Error(extractError(error, "Failed to fetch feasibility results."));
+  }
+};
+
+export const getFeasibilitySummary = async () => {
+  try {
+    const res = await api.get("/feasibility/summary");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching feasibility summary:", error);
+    throw new Error(extractError(error, "Failed to fetch feasibility summary."));
+  }
+};
+
+export const getCriticalFeasibilityIssues = async () => {
+  try {
+    const res = await api.get("/feasibility/critical");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching critical feasibility issues:", error);
+    throw new Error(extractError(error, "Failed to fetch critical feasibility issues."));
+  }
+};
+
+export const getFeasibilityRecommendations = async (proposalId: string) => {
+  try {
+    const res = await api.get(`/feasibility/recommendations/${proposalId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching feasibility recommendations:", error);
+    throw new Error(extractError(error, "Failed to fetch feasibility recommendations."));
+  }
+};
+
+export const exportFeasibilityCSV = async (): Promise<void> => {
+  let urlObj: string | null = null;
+  try {
+    const res = await api.get("/feasibility/export/csv", { responseType: "blob" });
+    urlObj = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = urlObj;
+    link.setAttribute("download", `feasibility_analysis_${timestamp()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error: any) {
+    console.error("Error exporting feasibility CSV:", error);
+    throw new Error(extractError(error, "Failed to export feasibility CSV."));
+  } finally {
+    if (urlObj) window.URL.revokeObjectURL(urlObj);
+  }
+};
+
+/* =========================
+   Feedback Analytics
+   ========================= */
+export const getFeedbackAnalytics = async (negotiationId?: string, feedbackType?: string, stakeholderRole?: string): Promise<FeedbackAnalytics> => {
+  try {
+    const params = new URLSearchParams();
+    if (negotiationId) params.append('negotiationId', negotiationId);
+    if (feedbackType) params.append('feedbackType', feedbackType);
+    if (stakeholderRole) params.append('stakeholderRole', stakeholderRole);
+    
+    const res = await api.get<{ data: FeedbackAnalytics }>(`/admin/feedback/analytics?${params.toString()}`);
+    return res.data.data;
+  } catch (error: any) {
+    console.error("Error fetching feedback analytics:", error);
+    throw new Error(extractError(error, "Failed to fetch feedback analytics."));
+  }
+};
+
+export const getFeedbackByNegotiation = async (negotiationId: string) => {
+  try {
+    const res = await api.get(`/admin/feedback/negotiation/${negotiationId}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching feedback by negotiation:", error);
+    throw new Error(extractError(error, "Failed to fetch feedback by negotiation."));
+  }
+};
+
+export const computeFeedback = async (feedbackData: any) => {
+  try {
+    const res = await api.post("/admin/feedback/compute", feedbackData);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error computing feedback:", error);
+    throw new Error(extractError(error, "Failed to compute feedback."));
+  }
+};
+
+export const getResearchData = async (negotiationId: string): Promise<ResearchData> => {
+  try {
+    const res = await api.get<{ data: ResearchData }>(`/admin/feedback/research-data?negotiationId=${negotiationId}`);
+    return res.data.data;
+  } catch (error: any) {
+    console.error("Error fetching research data:", error);
+    throw new Error(extractError(error, "Failed to fetch research data."));
+  }
+};
+
+/* =========================
+   Combined Negotiation
+   ========================= */
+export const initializeCombinedNegotiation = async (proposalId: string, stakeholderIds: string[], maxRounds: number = 5) => {
+  try {
+    const res = await api.post("/combined-negotiation/initialize", {
+      proposalId,
+      stakeholderIds,
+      maxRounds
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error initializing combined negotiation:", error);
+    throw new Error(extractError(error, "Failed to initialize combined negotiation."));
+  }
+};
+
+export const processStakeholderTurn = async (negotiationId: string, swingWeights: any, comments?: string) => {
+  try {
+    const res = await api.post(`/combined-negotiation/${negotiationId}/turn`, {
+      swingWeights,
+      comments
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error processing stakeholder turn:", error);
+    throw new Error(extractError(error, "Failed to process stakeholder turn."));
+  }
+};
+
+export const finalizeCombinedNegotiation = async (negotiationId: string) => {
+  try {
+    const res = await api.post(`/combined-negotiation/${negotiationId}/finalize`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error finalizing combined negotiation:", error);
+    throw new Error(extractError(error, "Failed to finalize combined negotiation."));
+  }
+};
+
+export const getCombinedNegotiationStatus = async (negotiationId: string) => {
+  try {
+    const res = await api.get(`/combined-negotiation/${negotiationId}/status`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching combined negotiation status:", error);
+    throw new Error(extractError(error, "Failed to fetch combined negotiation status."));
+  }
+};
+
+/* =========================
+   NLP and Summaries
+   ========================= */
+export const summarizeProposal = async (proposalId: string, anchorOnChain: boolean = false) => {
+  try {
+    const res = await api.post(`/nlp/proposals/${proposalId}/summarize`, {
+      anchorOnChain
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error summarizing proposal:", error);
+    throw new Error(extractError(error, "Failed to summarize proposal."));
+  }
+};
+
+export const summarizeAllProposals = async (onlyMissing: boolean = true, limit: number = 0, anchorOnChain: boolean = false) => {
+  try {
+    const res = await api.post("/nlp/proposals/summarize-all", {
+      onlyMissing,
+      limit,
+      anchorOnChain
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error("Error summarizing all proposals:", error);
+    throw new Error(extractError(error, "Failed to summarize all proposals."));
+  }
+};
+
+export const getSummaries = async (q?: string, proposalId?: string, latestOnly: boolean = true, page: number = 1, limit: number = 25, sort: string = "-createdAt", exportFormat?: 'csv' | 'json') => {
+  try {
+    const params = new URLSearchParams();
+    if (q) params.append('q', q);
+    if (proposalId) params.append('proposalId', proposalId);
+    params.append('latestOnly', latestOnly.toString());
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort', sort);
+    if (exportFormat) params.append('export', exportFormat);
+    
+    const res = await api.get(`/summaries?${params.toString()}`);
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching summaries:", error);
+    throw new Error(extractError(error, "Failed to fetch summaries."));
+  }
+};
+
+export const downloadSummary = async (summaryId: string): Promise<void> => {
+  let urlObj: string | null = null;
+  try {
+    const res = await api.get(`/summaries/${summaryId}/download`, { responseType: "blob" });
+    urlObj = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = urlObj;
+    link.setAttribute("download", `summary_${summaryId}_${timestamp()}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error: any) {
+    console.error("Error downloading summary:", error);
+    throw new Error(extractError(error, "Failed to download summary."));
+  } finally {
+    if (urlObj) window.URL.revokeObjectURL(urlObj);
   }
 };
 

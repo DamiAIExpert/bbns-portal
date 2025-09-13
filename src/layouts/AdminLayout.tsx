@@ -28,6 +28,11 @@ import {
   CheckSquareOutlined,
   DownloadOutlined,
   DatabaseOutlined,
+  SyncOutlined,
+  TrophyOutlined,
+  SearchOutlined,
+  ExclamationCircleOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { logoutUser } from '../services/authService';
 import type { User } from '../services/authService';
@@ -39,9 +44,14 @@ const { Title, Text } = Typography;
 // ---------- Sidebar items ----------
 const adminMenuItems: MenuProps['items'] = [
   { key: '/admin/dashboard', icon: <AppstoreOutlined />, label: <NavLink to="/admin/dashboard">Dashboard</NavLink> },
+  { key: '/admin/analytics', icon: <LineChartOutlined />, label: <NavLink to="/admin/analytics">Analytics</NavLink> },
   { key: '/admin/users', icon: <TeamOutlined />, label: <NavLink to="/admin/users">User Management</NavLink> },
   { key: '/admin/proposals', icon: <FileDoneOutlined />, label: <NavLink to="/admin/proposals">Proposals</NavLink> },
-  { key: '/admin/finalize', icon: <CheckSquareOutlined />, label: <NavLink to="/admin/finalize">Finalize</NavLink> }, // new
+  { key: '/admin/negotiations', icon: <SyncOutlined />, label: <NavLink to="/admin/negotiations">Negotiations</NavLink> },
+  { key: '/admin/benchmarking', icon: <TrophyOutlined />, label: <NavLink to="/admin/benchmarking">Benchmarking</NavLink> },
+  { key: '/admin/feasibility', icon: <SearchOutlined />, label: <NavLink to="/admin/feasibility">Feasibility Analysis</NavLink> },
+  { key: '/admin/conflicts', icon: <ExclamationCircleOutlined />, label: <NavLink to="/admin/conflicts">Conflicts</NavLink> },
+  { key: '/admin/finalize', icon: <CheckSquareOutlined />, label: <NavLink to="/admin/finalize">Finalize</NavLink> },
   { key: '/admin/evaluation', icon: <BarChartOutlined />, label: <NavLink to="/admin/evaluation">Evaluation Reports</NavLink> },
   { key: '/admin/blockchain-logs', icon: <SafetyOutlined />, label: <NavLink to="/admin/blockchain-logs">Blockchain Logs</NavLink> },
   { key: '/admin/settings', icon: <SettingOutlined />, label: <NavLink to="/admin/settings">Settings</NavLink> },
