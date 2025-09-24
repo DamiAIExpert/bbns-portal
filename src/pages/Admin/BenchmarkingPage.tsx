@@ -32,6 +32,7 @@ import {
     getAllProposals,
     getAllUsers,
     runBenchmarking,
+    getAllBenchmarkResults,
     getBenchmarkResults,
     getMethodComparison,
     getBenchmarkMetricsSummary,
@@ -43,7 +44,7 @@ const { Title, Paragraph } = Typography;
 const { Option } = Select;
 
 const BenchmarkingPage: React.FC = () => {
-    const [benchmarkResults] = useState<BenchmarkResult[]>([]);
+    const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -75,6 +76,18 @@ const BenchmarkingPage: React.FC = () => {
             setProposals(proposalsData);
             setUsers(usersData);
 
+            // Try to fetch benchmark results
+            let benchmarkData: BenchmarkResult[] = [];
+            try {
+                const resultsData = await getAllBenchmarkResults();
+                benchmarkData = Array.isArray(resultsData) ? resultsData : [];
+            } catch (err) {
+                console.warn("Could not fetch benchmark results:", err);
+                // If no benchmark results exist, show empty array instead of mock data
+                benchmarkData = [];
+            }
+            setBenchmarkResults(benchmarkData);
+
             // Try to fetch additional data, but don't fail if they don't exist
             try {
                 const comparisonData = await getMethodComparison();
@@ -94,17 +107,36 @@ const BenchmarkingPage: React.FC = () => {
                 ]);
             }
 
+            // Always calculate metrics from the fetched benchmark data
+            const totalBenchmarks = benchmarkData.length;
+            const avgTTC = benchmarkData.length > 0 
+                ? benchmarkData.reduce((sum, result) => sum + result.mainContribution.ttcSeconds, 0) / benchmarkData.length 
+                : 0;
+            const successRate = benchmarkData.length > 0 
+                ? (benchmarkData.filter(result => result.mainContribution.resolutionSuccess).length / benchmarkData.length) * 100 
+                : 0;
+            const avgSatisfaction = benchmarkData.length > 0 
+                ? benchmarkData.reduce((sum, result) => sum + result.mainContribution.ssMean, 0) / benchmarkData.length 
+                : 0;
+            
+            // Try to get additional summary data from API, but use calculated metrics as fallback
             try {
                 const summaryData = await getBenchmarkMetricsSummary();
-                setMetricsSummary(summaryData);
+                // Use API data if available, otherwise use calculated metrics
+                setMetricsSummary({
+                    totalBenchmarks: summaryData.totalBenchmarks || totalBenchmarks,
+                    averageTTC: summaryData.averageTTC || avgTTC,
+                    successRate: summaryData.successRate || successRate,
+                    averageSatisfaction: summaryData.averageSatisfaction || avgSatisfaction
+                });
             } catch (err) {
                 console.warn("Could not fetch benchmark metrics summary:", err);
-                // Provide mock data for demonstration
+                // Use calculated metrics from benchmark data
                 setMetricsSummary({
-                    totalBenchmarks: 24,
-                    averageTTC: 31.2,
-                    successRate: 87.5,
-                    averageSatisfaction: 8.2
+                    totalBenchmarks,
+                    averageTTC: avgTTC,
+                    successRate,
+                    averageSatisfaction: avgSatisfaction
                 });
             }
         } catch (err: any) {
@@ -122,7 +154,8 @@ const BenchmarkingPage: React.FC = () => {
             message.success('Benchmarking completed successfully');
             setRunModalVisible(false);
             form.resetFields();
-            // Refresh data or add to results
+            // Refresh data after running benchmark
+            await fetchData();
         } catch (err: any) {
             console.error("Failed to run benchmarking:", err);
             message.error(err.message || 'Failed to run benchmarking');
@@ -364,6 +397,19 @@ const BenchmarkingPage: React.FC = () => {
                         showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} results`
                     }}
                     scroll={{ x: 1200 }}
+                    locale={{
+                        emptyText: (
+                            <div style={{ textAlign: 'center', padding: '40px' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+                                <div style={{ fontSize: '16px', color: '#666', marginBottom: '8px' }}>
+                                    No benchmark results found
+                                </div>
+                                <div style={{ fontSize: '14px', color: '#999' }}>
+                                    Run your first benchmark to see results here
+                                </div>
+                            </div>
+                        )
+                    }}
                 />
             </Card>
 

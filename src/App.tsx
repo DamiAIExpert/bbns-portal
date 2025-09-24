@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, App as AntApp } from 'antd';
 import { ThemeProvider } from 'styled-components';
@@ -51,6 +51,53 @@ const ResetPasswordPage = () => <div style={{ padding: 40 }}>Reset Password Page
 
 // --- App Component ---
 const App: React.FC = () => {
+  useEffect(() => {
+    // Global error handler to catch unhandled JavaScript errors
+    const handleGlobalError = (event: ErrorEvent) => {
+      console.error('Global error caught:', event.error);
+      
+      // Handle specific errors that might be from browser extensions
+      if (event.message?.includes('resumeId') || 
+          event.filename?.includes('contents.') ||
+          event.filename?.includes('extension://')) {
+        console.warn('Browser extension error detected and ignored:', event.message);
+        event.preventDefault(); // Prevent the error from propagating
+        return;
+      }
+      
+      // Log other errors for debugging but don't break the app
+      console.error('Unhandled error:', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error
+      });
+    };
+
+    // Global promise rejection handler
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      
+      // Handle specific promise rejections
+      if (event.reason?.message?.includes('resumeId')) {
+        console.warn('Browser extension promise rejection detected and ignored:', event.reason.message);
+        event.preventDefault();
+        return;
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   return (
     <ConfigProvider theme={customTheme}>
       <ThemeProvider theme={customTheme}>

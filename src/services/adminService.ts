@@ -480,6 +480,17 @@ export const reopenNegotiation = async (negotiationId: string) => {
   }
 };
 
+// Function to start negotiations for all pending proposals
+export const startAllNegotiations = async () => {
+  try {
+    const res = await api.post("/negotiation/negotiate/all");
+    return res.data;
+  } catch (error: any) {
+    console.error("Error starting all negotiations:", error);
+    throw new Error(extractError(error, "Failed to start all negotiations."));
+  }
+};
+
 /* =========================
    Conflicts
    ========================= */
@@ -503,6 +514,34 @@ export const getConflictsAggregate = async () => {
   }
 };
 
+export const getAllConflicts = async (status?: string, type?: string, limit: number = 50, offset: number = 0): Promise<Conflict[]> => {
+  try {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (type) params.append('type', type);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const res = await api.get(`/conflicts/all?${params.toString()}`);
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || [];
+  } catch (error: any) {
+    console.error("Error fetching all conflicts:", error);
+    throw new Error(extractError(error, "Failed to fetch conflicts."));
+  }
+};
+
+export const getProposalsWithConflicts = async () => {
+  try {
+    const res = await api.get("/conflicts/proposals-with-conflicts");
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || null;
+  } catch (error: any) {
+    console.error("Error fetching proposals with conflicts:", error);
+    throw new Error(extractError(error, "Failed to fetch proposals with conflicts."));
+  }
+};
+
 /* =========================
    Benchmarking
    ========================= */
@@ -517,6 +556,16 @@ export const runBenchmarking = async (proposalId: string, stakeholderIds: string
   } catch (error: any) {
     console.error("Error running benchmarking:", error);
     throw new Error(extractError(error, "Failed to run benchmarking."));
+  }
+};
+
+export const getAllBenchmarkResults = async (): Promise<BenchmarkResult[]> => {
+  try {
+    const res = await api.get<BenchmarkResult[]>('/benchmarking/results');
+    return res.data;
+  } catch (error: any) {
+    console.error("Error fetching all benchmark results:", error);
+    throw new Error(extractError(error, "Failed to fetch benchmark results."));
   }
 };
 
@@ -588,12 +637,13 @@ export const exportBenchmarkCSV = async (negotiationId?: string): Promise<void> 
    ========================= */
 export const analyzeFeasibility = async (proposalId: string, analysisType: 'initial' | 'revision' | 'final' = 'initial', includeStakeholders: boolean = true, options: any = {}): Promise<FeasibilityAnalysis> => {
   try {
-    const res = await api.post<FeasibilityAnalysis>(`/feasibility/analyze/${proposalId}`, {
+    const res = await api.post(`/feasibility/analyze/${proposalId}`, {
       analysisType,
       includeStakeholders,
       options
     });
-    return res.data;
+    // Extract data from the wrapped response
+    return res.data?.data || res.data;
   } catch (error: any) {
     console.error("Error analyzing feasibility:", error);
     throw new Error(extractError(error, "Failed to analyze feasibility."));
@@ -602,18 +652,31 @@ export const analyzeFeasibility = async (proposalId: string, analysisType: 'init
 
 export const getFeasibilityResults = async (proposalId: string): Promise<FeasibilityAnalysis> => {
   try {
-    const res = await api.get<FeasibilityAnalysis>(`/feasibility/results/${proposalId}`);
-    return res.data;
+    const res = await api.get(`/feasibility/results/${proposalId}`);
+    // Extract data from the wrapped response
+    return res.data?.data || res.data;
   } catch (error: any) {
     console.error("Error fetching feasibility results:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility results."));
   }
 };
 
+export const getAllFeasibilityAnalyses = async (): Promise<FeasibilityAnalysis[]> => {
+  try {
+    const res = await api.get("/feasibility/all");
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || [];
+  } catch (error: any) {
+    console.error("Error fetching all feasibility analyses:", error);
+    throw new Error(extractError(error, "Failed to fetch feasibility analyses."));
+  }
+};
+
 export const getFeasibilitySummary = async () => {
   try {
     const res = await api.get("/feasibility/summary");
-    return res.data;
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || null;
   } catch (error: any) {
     console.error("Error fetching feasibility summary:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility summary."));
@@ -623,7 +686,8 @@ export const getFeasibilitySummary = async () => {
 export const getCriticalFeasibilityIssues = async () => {
   try {
     const res = await api.get("/feasibility/critical");
-    return res.data;
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || [];
   } catch (error: any) {
     console.error("Error fetching critical feasibility issues:", error);
     throw new Error(extractError(error, "Failed to fetch critical feasibility issues."));
@@ -633,7 +697,8 @@ export const getCriticalFeasibilityIssues = async () => {
 export const getFeasibilityRecommendations = async (proposalId: string) => {
   try {
     const res = await api.get(`/feasibility/recommendations/${proposalId}`);
-    return res.data;
+    // Extract data from the wrapped response
+    return res.data?.data || res.data || [];
   } catch (error: any) {
     console.error("Error fetching feasibility recommendations:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility recommendations."));
@@ -975,5 +1040,284 @@ export const getBlockchainLogs = async (params: GetLogsParams = {}): Promise<Blo
   } catch (error: any) {
     console.error("Error fetching blockchain logs:", error);
     throw new Error(extractError(error, "Failed to fetch blockchain logs."));
+  }
+};
+
+/* =========================
+   Batch Summarization
+   ========================= */
+export interface BatchSummarizeResponse {
+  processed: number;
+  onlyMissing: boolean;
+  limit: number;
+  anchorOnChain: boolean;
+  items: Array<{
+    proposalId: string;
+    summary: string;
+    summaryId: string;
+    anchored?: {
+      enabled: boolean;
+      transactionHash?: string;
+      blockNumber?: number;
+      error?: string;
+    };
+  }>;
+}
+
+export interface BlockchainStorageResponse {
+  message: string;
+  processed: number;
+  successful: number;
+  failed: number;
+  results: Array<{
+    proposalId: string;
+    title: string;
+    status: 'success' | 'failed' | 'dry-run';
+    transactionHash?: string;
+    blockNumber?: number;
+    network?: string;
+    error?: string;
+    message?: string;
+  }>;
+  dryRun: boolean;
+}
+
+export const storeAllProposalsOnBlockchain = async (options: {
+  dryRun?: boolean;
+  limit?: number;
+} = {}): Promise<BlockchainStorageResponse> => {
+  try {
+    const response = await api.post('/blockchain/store-all-proposals', options);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error storing proposals on blockchain:", error);
+    throw new Error(extractError(error, "Failed to store proposals on blockchain."));
+  }
+};
+
+export interface BlockchainSummary {
+  totalTransactions: number;
+  successfulTransactions: number;
+  failedTransactions: number;
+  totalProposalsStored: number;
+  averageTransactionTime: number;
+  blockchainHealth: {
+    status: string;
+    lastTransaction: string | null;
+    successRate: number;
+    averageResponseTime: number;
+    networkStatus: string;
+  };
+}
+
+export interface BlockchainTransaction {
+  _id: string;
+  proposalId?: string;
+  transactionHash?: string;
+  status: string;
+  timestamp: string;
+  completedAt?: string;
+  duration?: number;
+  error?: string;
+  proposal?: {
+    _id: string;
+    title: string;
+    description: string;
+    status: string;
+  };
+}
+
+export interface BlockchainTransactionsResponse {
+  transactions: BlockchainTransaction[];
+  totalCount: number;
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export const getBlockchainSummary = async (): Promise<BlockchainSummary> => {
+  try {
+    const res = await api.get("/blockchain/summary");
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error("Error fetching blockchain summary:", error);
+    throw new Error(extractError(error, "Failed to fetch blockchain summary."));
+  }
+};
+
+export const getBlockchainTransactions = async (params: {
+  status?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<BlockchainTransactionsResponse> => {
+  try {
+    const res = await api.get("/blockchain/transactions", { params });
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error("Error fetching blockchain transactions:", error);
+    throw new Error(extractError(error, "Failed to fetch blockchain transactions."));
+  }
+};
+
+/* =========================
+   Settings
+   ========================= */
+export interface SystemInfo {
+  database: {
+    status: string;
+    connected: boolean;
+    collections: {
+      proposals: number;
+      users: number;
+      negotiations: number;
+      blockchainStored: number;
+    };
+  };
+  blockchain: {
+    status: string;
+    lastActivity: string | null;
+    totalTransactions: number;
+  };
+  system: {
+    nodeVersion: string;
+    platform: string;
+    uptime: number;
+    memoryUsage: {
+      rss: number;
+      heapTotal: number;
+      heapUsed: number;
+      external: number;
+    };
+    environment: string;
+  };
+}
+
+export interface SystemHealth {
+  overall: 'healthy' | 'warning' | 'critical';
+  components: {
+    database: {
+      status: string;
+      message: string;
+      details: any;
+    };
+    collections: {
+      status: string;
+      message: string;
+      details: any;
+    };
+    memory: {
+      status: string;
+      message: string;
+      details: any;
+    };
+    uptime: {
+      status: string;
+      message: string;
+      details: any;
+    };
+  };
+  timestamp: string;
+}
+
+export interface BackupResponse {
+  backupId: string;
+  timestamp: string;
+  size: number;
+  collections: number;
+}
+
+export const getSystemInfo = async (): Promise<SystemInfo> => {
+  try {
+    const res = await api.get("/settings/system-info");
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error("Error fetching system info:", error);
+    throw new Error(extractError(error, "Failed to fetch system information."));
+  }
+};
+
+export const getSystemHealth = async (): Promise<SystemHealth> => {
+  try {
+    const res = await api.get("/settings/system-health");
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error("Error fetching system health:", error);
+    throw new Error(extractError(error, "Failed to fetch system health."));
+  }
+};
+
+export const exportSystemData = async (type: string, format: string = 'csv'): Promise<void> => {
+  try {
+    const res = await api.get("/settings/export-data", {
+      params: { type, format },
+      responseType: 'blob'
+    });
+    
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${type}_export_${new Date().toISOString().split('T')[0]}.${format}`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error: any) {
+    console.error("Error exporting data:", error);
+    throw new Error(extractError(error, "Failed to export data."));
+  }
+};
+
+export const createSystemBackup = async (options: {
+  includeBlockchain?: boolean;
+  includeUsers?: boolean;
+} = {}): Promise<BackupResponse> => {
+  try {
+    const res = await api.post("/settings/backup", options);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error("Error creating backup:", error);
+    throw new Error(extractError(error, "Failed to create system backup."));
+  }
+};
+
+/**
+ * Undo elicitation - remove all preferences from all proposals
+ */
+export const undoAllElicitation = async (): Promise<{ message: string; deleted: number }> => {
+  try {
+    const response = await api.delete('/admin/preferences/undo-all');
+    return response.data;
+  } catch (error: any) {
+    console.error("Error undoing elicitation:", error);
+    throw new Error(extractError(error, "Failed to undo elicitation."));
+  }
+};
+
+/**
+ * Run automated elicitation for all proposals
+ */
+export const elicitAllPreferences = async (): Promise<{ message: string; processed: number; created: number }> => {
+  try {
+    const response = await api.post('/admin/preferences/elicit-all');
+    return response.data;
+  } catch (error: any) {
+    console.error("Error running elicitation for all:", error);
+    throw new Error(extractError(error, "Failed to run elicitation for all proposals."));
+  }
+};
+
+/**
+ * Mark individual proposal as elicitation completed
+ */
+export const markElicitationDone = async (proposalId: string): Promise<{ message: string; proposalId: string }> => {
+  try {
+    const response = await api.put(`/admin/proposals/${proposalId}/elicitation-done`);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error marking elicitation as done:", error);
+    throw new Error(extractError(error, "Failed to mark elicitation as done."));
   }
 };

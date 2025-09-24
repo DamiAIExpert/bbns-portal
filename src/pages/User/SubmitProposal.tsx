@@ -64,7 +64,7 @@ const SubmitProposal: React.FC = () => {
                 style={{ marginBottom: isMobile ? '16px' : '24px' }}
             />
             {/* On mobile, we reduce the card's internal padding since the parent layout already provides it. */}
-            <Card bordered={false} bodyStyle={{ padding: isMobile ? '1px' : '24px' }}>
+            <Card variant="borderless" bodyStyle={{ padding: isMobile ? '1px' : '24px' }}>
                 {/* Use a smaller title on mobile devices */}
                 <Title level={isMobile ? 4 : 3}>Data Collection for Ph.D. Research</Title>
                 <Paragraph type="secondary">

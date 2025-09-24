@@ -3,7 +3,6 @@ import {
     Card, 
     Table, 
     Button, 
-    Space, 
     Tag, 
     Modal, 
     Row,
@@ -11,42 +10,63 @@ import {
     Statistic,
     Typography,
     Alert,
-    List,
     Select,
     Input,
-    DatePicker
+    Tabs,
+    Badge,
+    Collapse,
+    Divider
 } from 'antd';
 import {
     ExclamationCircleOutlined,
     CheckCircleOutlined,
-    ClockCircleOutlined,
     WarningOutlined,
     SearchOutlined,
-    ReloadOutlined,
     EyeOutlined,
+    UserOutlined,
+    FileTextOutlined
 } from '@ant-design/icons';
-import { Bar, Pie } from '@ant-design/plots';
+import { Pie, Column } from '@ant-design/plots';
 import { 
-    getAllNegotiations,
-    getConflictsByNegotiation,
-    getConflictsAggregate
+    getAllConflicts,
+    getProposalsWithConflicts,
 } from '../../services/adminService';
-import type { Conflict, Negotiation } from '../../services/adminService';
+import type { Conflict } from '../../services/adminService';
 
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
-const { RangePicker } = DatePicker;
+const { TabPane } = Tabs;
+const { Panel } = Collapse;
+
+interface ProposalWithConflicts {
+    proposal: any;
+    conflicts: Conflict[];
+    stakeholders: any[];
+    negotiation: any;
+}
+
+interface ConflictSummary {
+    totalConflicts: number;
+    resolvedConflicts: number;
+    openConflicts: number;
+    conflictsByType: Record<string, number>;
+    conflictsByProposal: number;
+}
 
 const ConflictsPage: React.FC = () => {
     const [conflicts, setConflicts] = useState<Conflict[]>([]);
-    const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
+    const [proposalsWithConflicts, setProposalsWithConflicts] = useState<{
+        proposalsByRole: Record<string, ProposalWithConflicts[]>;
+        conflictSummary: ConflictSummary;
+        totalProposalsWithConflicts: number;
+    } | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedConflict, setSelectedConflict] = useState<Conflict | null>(null);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const [selectedNegotiation, setSelectedNegotiation] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [typeFilter, setTypeFilter] = useState<string>('all');
     const [searchText, setSearchText] = useState<string>('');
-    const [dateRange, setDateRange] = useState<any>(null);
 
     useEffect(() => {
         fetchData();
@@ -57,55 +77,13 @@ const ConflictsPage: React.FC = () => {
             setLoading(true);
             setError(null);
             
-            const [negotiationsData] = await Promise.all([
-                getAllNegotiations(),
-                getConflictsAggregate().catch(() => null)
+            const [conflictsData, proposalsData] = await Promise.all([
+                getAllConflicts(),
+                getProposalsWithConflicts()
             ]);
             
-            setNegotiations(negotiationsData);
-            
-            // Fetch conflicts for all negotiations
-            const allConflicts: Conflict[] = [];
-            for (const negotiation of negotiationsData) {
-                try {
-                    const negotiationConflicts = await getConflictsByNegotiation(negotiation._id);
-                    allConflicts.push(...negotiationConflicts);
-                } catch (error) {
-                    console.warn(`Could not fetch conflicts for negotiation ${negotiation._id}:`, error);
-                }
-            }
-            
-            // If no conflicts found, provide mock data for demonstration
-            if (allConflicts.length === 0) {
-                const mockConflicts: Conflict[] = [
-                    {
-                        _id: 'mock-conflict-1',
-                        negotiationId: 'mock-negotiation-1',
-                        type: 'requirement_conflict',
-                        severity: 'high',
-                        description: 'Conflicting requirements between stakeholders regarding user authentication method',
-                        status: 'open',
-                        resolved: false,
-                        detectedAt: new Date().toISOString(),
-                        roundNumber: 2
-                    },
-                    {
-                        _id: 'mock-conflict-2',
-                        negotiationId: 'mock-negotiation-1',
-                        type: 'priority_conflict',
-                        severity: 'medium',
-                        description: 'Disagreement on feature prioritization between development and business teams',
-                        status: 'resolved',
-                        resolved: true,
-                        detectedAt: new Date(Date.now() - 86400000).toISOString(),
-                        resolvedAt: new Date().toISOString(),
-                        roundNumber: 1
-                    }
-                ];
-                setConflicts(mockConflicts);
-            } else {
-                setConflicts(allConflicts);
-            }
+            setConflicts(conflictsData);
+            setProposalsWithConflicts(proposalsData);
         } catch (err: any) {
             console.error("Failed to fetch conflicts data:", err);
             setError(err.message || 'Failed to fetch conflicts data');
@@ -114,49 +92,50 @@ const ConflictsPage: React.FC = () => {
         }
     };
 
-    const handleViewDetails = (conflict: Conflict) => {
+    const handleViewConflict = (conflict: Conflict) => {
         setSelectedConflict(conflict);
         setModalVisible(true);
     };
 
-    const getSeverityColor = (severity: string) => {
-        const colors = {
-            low: 'green',
-            medium: 'orange',
-            high: 'red',
-            critical: 'purple'
-        };
-        return colors[severity as keyof typeof colors] || 'default';
-    };
-
-    const getSeverityIcon = (severity: string) => {
-        const icons = {
-            low: <CheckCircleOutlined />,
-            medium: <WarningOutlined />,
-            high: <ExclamationCircleOutlined />,
-            critical: <ExclamationCircleOutlined />
-        };
-        return icons[severity as keyof typeof icons] || <WarningOutlined />;
-    };
-
     const getStatusColor = (status: string) => {
-        return status === 'resolved' ? 'green' : 'red';
+        switch (status) {
+            case 'resolved': return 'green';
+            case 'open': return 'red';
+            default: return 'default';
+        }
+    };
+
+    const getTypeColor = (type: string) => {
+        switch (type) {
+            case 'requirement_conflict': return 'blue';
+            case 'resource_conflict': return 'orange';
+            case 'timeline_conflict': return 'purple';
+            case 'stakeholder_conflict': return 'red';
+            default: return 'default';
+        }
+    };
+
+    const getRoleColor = (role: string) => {
+        switch (role) {
+            case 'admin': return 'red';
+            case 'it_staff': return 'blue';
+            case 'faculty': return 'green';
+            case 'student': return 'orange';
+            default: return 'default';
+        }
     };
 
     const filteredConflicts = conflicts.filter(conflict => {
-        const matchesNegotiation = selectedNegotiation === 'all' || conflict.negotiationId === selectedNegotiation;
+        const matchesStatus = statusFilter === 'all' || conflict.status === statusFilter;
+        const matchesType = typeFilter === 'all' || conflict.type === typeFilter;
         const matchesSearch = searchText === '' || 
-            conflict.description.toLowerCase().includes(searchText.toLowerCase()) ||
-            conflict.type.toLowerCase().includes(searchText.toLowerCase());
-        const matchesDateRange = !dateRange || (
-            new Date(conflict.detectedAt) >= dateRange[0] && 
-            new Date(conflict.detectedAt) <= dateRange[1]
-        );
+            conflict.description?.toLowerCase().includes(searchText.toLowerCase()) ||
+            conflict.type?.toLowerCase().includes(searchText.toLowerCase());
         
-        return matchesNegotiation && matchesSearch && matchesDateRange;
+        return matchesStatus && matchesType && matchesSearch;
     });
 
-    const columns = [
+    const conflictColumns = [
         {
             title: 'ID',
             dataIndex: '_id',
@@ -169,20 +148,22 @@ const ConflictsPage: React.FC = () => {
             dataIndex: 'type',
             key: 'type',
             render: (type: string) => (
-                <Tag color="blue">{type.replace('_', ' ').toUpperCase()}</Tag>
+                <Tag color={getTypeColor(type)}>
+                    {type?.replace('_', ' ').toUpperCase() || 'Unknown'}
+                </Tag>
             ),
             width: 150
         },
         {
-            title: 'Severity',
-            dataIndex: 'severity',
-            key: 'severity',
-            render: (severity: string) => (
-                <Tag color={getSeverityColor(severity)} icon={getSeverityIcon(severity)}>
-                    {severity.toUpperCase()}
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            render: (status: string) => (
+                <Tag color={getStatusColor(status)}>
+                    {status?.toUpperCase() || 'Unknown'}
                 </Tag>
             ),
-            width: 120
+            width: 100
         },
         {
             title: 'Description',
@@ -192,22 +173,37 @@ const ConflictsPage: React.FC = () => {
             width: 300
         },
         {
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status: string) => (
-                <Tag color={getStatusColor(status)}>
-                    {status.toUpperCase()}
-                </Tag>
+            title: 'Proposal',
+            dataIndex: ['proposalId', 'title'],
+            key: 'proposal',
+            render: (title: string, record: Conflict) => (
+                <div>
+                    <Text strong>{title || 'N/A'}</Text>
+                    <br />
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                        {(record.proposalId as any)?.status || 'Unknown Status'}
+                    </Text>
+                </div>
             ),
-            width: 100
+            width: 200
         },
         {
-            title: 'Round',
-            dataIndex: 'roundNumber',
-            key: 'roundNumber',
-            render: (round: number) => round || 'N/A',
-            width: 80
+            title: 'Stakeholders',
+            dataIndex: 'stakeholders',
+            key: 'stakeholders',
+            render: (stakeholders: any[]) => (
+                <div>
+                    {stakeholders?.slice(0, 2).map((stakeholder, index) => (
+                        <Tag key={index} color={getRoleColor(stakeholder.role)}>
+                            {stakeholder.name}
+                        </Tag>
+                    ))}
+                    {stakeholders?.length > 2 && (
+                        <Tag>+{stakeholders.length - 2}</Tag>
+                    )}
+                </div>
+            ),
+            width: 200
         },
         {
             title: 'Detected',
@@ -217,79 +213,203 @@ const ConflictsPage: React.FC = () => {
             width: 120
         },
         {
-            title: 'Resolved',
-            dataIndex: 'resolvedAt',
-            key: 'resolvedAt',
-            render: (date: string) => date ? new Date(date).toLocaleDateString() : 'N/A',
-            width: 120
-        },
-        {
             title: 'Actions',
             key: 'actions',
             render: (_: any, record: Conflict) => (
-                <Space>
                     <Button 
+                    type="link" 
                         icon={<EyeOutlined />} 
-                        size="small"
-                        onClick={() => handleViewDetails(record)}
-                        title="View Details"
-                    />
-                </Space>
+                    onClick={() => handleViewConflict(record)}
+                >
+                    View
+                </Button>
             ),
             width: 100
         }
     ];
 
-    const getStats = () => {
-        const total = conflicts.length;
-        const resolved = conflicts.filter(c => c.status === 'resolved').length;
-        const open = conflicts.filter(c => c.status === 'open').length;
-        const critical = conflicts.filter(c => c.severity === 'critical').length;
-        const high = conflicts.filter(c => c.severity === 'high').length;
-        
-        return { total, resolved, open, critical, high };
+    const renderProposalsByRole = () => {
+        if (!proposalsWithConflicts?.proposalsByRole) return null;
+
+        return Object.entries(proposalsWithConflicts.proposalsByRole).map(([role, proposals]) => (
+            <Panel 
+                header={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Tag color={getRoleColor(role)}>{role.toUpperCase()}</Tag>
+                        <Badge count={proposals.length} showZero />
+                        <Text>Proposals with Conflicts</Text>
+                    </div>
+                } 
+                key={role}
+            >
+                <Row gutter={[16, 16]}>
+                    {proposals.map((item, index) => (
+                        <Col xs={24} sm={12} lg={8} key={index}>
+                            <Card 
+                                size="small"
+                                title={
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <FileTextOutlined />
+                                        <Text ellipsis style={{ maxWidth: '200px' }}>
+                                            {item.proposal.title}
+                                        </Text>
+                                    </div>
+                                }
+                                extra={
+                                    <Badge 
+                                        count={item.conflicts.length} 
+                                        style={{ backgroundColor: '#ff4d4f' }}
+                                    />
+                                }
+                                actions={[
+                                    <Button 
+                                        type="link" 
+                                        size="small"
+                                        onClick={() => {
+                                            const firstConflict = item.conflicts[0];
+                                            if (firstConflict) handleViewConflict(firstConflict);
+                                        }}
+                                    >
+                                        View Conflicts
+                                    </Button>
+                                ]}
+                            >
+                                <div style={{ marginBottom: '8px' }}>
+                                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                                        Status: <Tag color={item.proposal.status === 'active' ? 'green' : 'default'}>
+                                            {item.proposal.status}
+                                        </Tag>
+                                    </Text>
+                                </div>
+                                
+                                <div style={{ marginBottom: '8px' }}>
+                                    <Text strong style={{ fontSize: '12px' }}>Stakeholders:</Text>
+                                    <div style={{ marginTop: '4px' }}>
+                                        {item.stakeholders.slice(0, 3).map((stakeholder, idx) => (
+                                            <Tag key={idx} color={getRoleColor(stakeholder.role)}>
+                                                {stakeholder.name}
+                                            </Tag>
+                                        ))}
+                                        {item.stakeholders.length > 3 && (
+                                            <Tag>+{item.stakeholders.length - 3}</Tag>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Text strong style={{ fontSize: '12px' }}>Conflict Types:</Text>
+                                    <div style={{ marginTop: '4px' }}>
+                                        {Array.from(new Set(item.conflicts.map(c => c.type))).slice(0, 2).map((type, idx) => (
+                                            <Tag key={idx} color={getTypeColor(type)}>
+                                                {type?.replace('_', ' ')}
+                                            </Tag>
+                                        ))}
+                                        {Array.from(new Set(item.conflicts.map(c => c.type))).length > 2 && (
+                                            <Tag>+{Array.from(new Set(item.conflicts.map(c => c.type))).length - 2}</Tag>
+                                        )}
+                                    </div>
+                                </div>
+                            </Card>
+                        </Col>
+                    ))}
+                </Row>
+            </Panel>
+        ));
     };
 
-    const stats = getStats();
+    const renderConflictCharts = () => {
+        if (!proposalsWithConflicts?.conflictSummary) return null;
 
-    if (loading) {
-        return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-            <div>Loading conflicts data...</div>
-        </div>;
-    }
+        const { conflictSummary } = proposalsWithConflicts;
 
-    if (error) {
-        return <Alert message="Error" description={error} type="error" showIcon />;
-    }
+        // Status distribution chart
+        const statusData = [
+            { type: 'Resolved', value: conflictSummary.resolvedConflicts },
+            { type: 'Open', value: conflictSummary.openConflicts }
+        ];
+
+        // Conflict types chart
+        const typeData = Object.entries(conflictSummary.conflictsByType).map(([type, count]) => ({
+            type: type.replace('_', ' ').toUpperCase(),
+            value: count
+        }));
+
+        return (
+            <Row gutter={[16, 16]}>
+                <Col xs={24} md={12}>
+                    <Card title="Conflict Status Distribution" size="small">
+                        <Pie
+                            data={statusData}
+                            angleField="value"
+                            colorField="type"
+                            radius={0.8}
+                            label={{
+                                type: 'outer',
+                                content: '{name}: {percentage}'
+                            }}
+                            color={['#52c41a', '#ff4d4f']}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} md={12}>
+                    <Card title="Conflict Types Distribution" size="small">
+                        <Column
+                            data={typeData}
+                            xField="type"
+                            yField="value"
+                            color="#1890ff"
+                            label={{
+                                position: 'middle',
+                                style: {
+                                    fill: '#FFFFFF',
+                                    opacity: 0.6
+                                }
+                            }}
+                        />
+                    </Card>
+                </Col>
+            </Row>
+        );
+    };
 
     return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div>
-                    <Title level={2}>Conflicts Management</Title>
-                    <Paragraph type="secondary">Monitor and manage requirement conflicts across all negotiations.</Paragraph>
-                </div>
-                <Button icon={<ReloadOutlined />} onClick={fetchData}>
-                    Refresh
-                </Button>
+        <div style={{ padding: '24px' }}>
+            <div style={{ marginBottom: '24px' }}>
+                <Title level={2}>Conflict Management</Title>
+                <Paragraph>
+                    Comprehensive view of conflicts across proposals and stakeholder groups. 
+                    Monitor conflict resolution progress and identify patterns.
+                </Paragraph>
             </div>
 
-            {/* Statistics Row */}
-            <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
+            {error && (
+                <Alert
+                    message="Error"
+                    description={error}
+                    type="error"
+                    showIcon
+                    style={{ marginBottom: '16px' }}
+                />
+            )}
+
+            {/* Summary Statistics */}
+            {proposalsWithConflicts?.conflictSummary && (
+                <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
                 <Col xs={24} sm={6}>
                     <Card>
                         <Statistic 
                             title="Total Conflicts" 
-                            value={stats.total} 
+                                value={proposalsWithConflicts.conflictSummary.totalConflicts}
                             prefix={<ExclamationCircleOutlined />} 
+                                valueStyle={{ color: '#1890ff' }}
                         />
                     </Card>
                 </Col>
                 <Col xs={24} sm={6}>
                     <Card>
                         <Statistic 
-                            title="Resolved" 
-                            value={stats.resolved} 
+                                title="Resolved Conflicts"
+                                value={proposalsWithConflicts.conflictSummary.resolvedConflicts}
                             prefix={<CheckCircleOutlined />}
                             valueStyle={{ color: '#52c41a' }}
                         />
@@ -298,63 +418,57 @@ const ConflictsPage: React.FC = () => {
                 <Col xs={24} sm={6}>
                     <Card>
                         <Statistic 
-                            title="Open" 
-                            value={stats.open} 
-                            prefix={<ClockCircleOutlined />}
-                            valueStyle={{ color: '#faad14' }}
+                                title="Open Conflicts"
+                                value={proposalsWithConflicts.conflictSummary.openConflicts}
+                                prefix={<WarningOutlined />}
+                                valueStyle={{ color: '#ff4d4f' }}
                         />
                     </Card>
                 </Col>
                 <Col xs={24} sm={6}>
                     <Card>
                         <Statistic 
-                            title="Critical" 
-                            value={stats.critical} 
-                            prefix={<ExclamationCircleOutlined />}
-                            valueStyle={{ color: '#f5222d' }}
+                                title="Proposals with Conflicts"
+                                value={proposalsWithConflicts.totalProposalsWithConflicts}
+                                prefix={<FileTextOutlined />}
+                                valueStyle={{ color: '#722ed1' }}
                         />
                     </Card>
                 </Col>
             </Row>
+            )}
 
-            {/* Charts Row */}
-            <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
-                <Col xs={24} lg={12}>
-                    <Card title="Conflicts by Severity">
-                        <Pie
-                            data={[
-                                { severity: 'Low', count: conflicts.filter(c => c.severity === 'low').length },
-                                { severity: 'Medium', count: conflicts.filter(c => c.severity === 'medium').length },
-                                { severity: 'High', count: conflicts.filter(c => c.severity === 'high').length },
-                                { severity: 'Critical', count: conflicts.filter(c => c.severity === 'critical').length }
-                            ]}
-                            angleField="count"
-                            colorField="severity"
-                            radius={0.8}
-                            height={250}
-                            color={['#52c41a', '#faad14', '#f5222d', '#722ed1']}
-                        />
-                    </Card>
+            <Tabs defaultActiveKey="conflicts">
+                <TabPane tab="All Conflicts" key="conflicts">
+                    {/* Filters */}
+                    <Card style={{ marginBottom: '16px' }}>
+                        <Row gutter={[16, 16]} align="middle">
+                            <Col xs={24} sm={8}>
+                                <Select
+                                    placeholder="Filter by Status"
+                                    value={statusFilter}
+                                    onChange={setStatusFilter}
+                                    style={{ width: '100%' }}
+                                >
+                                    <Option value="all">All Status</Option>
+                                    <Option value="open">Open</Option>
+                                    <Option value="resolved">Resolved</Option>
+                                </Select>
                 </Col>
-                <Col xs={24} lg={12}>
-                    <Card title="Resolution Status">
-                        <Bar
-                            data={[
-                                { status: 'Open', count: stats.open },
-                                { status: 'Resolved', count: stats.resolved }
-                            ]}
-                            xField="count"
-                            yField="status"
-                            height={250}
-                            color={['#faad14', '#52c41a']}
-                        />
-                    </Card>
+                            <Col xs={24} sm={8}>
+                                <Select
+                                    placeholder="Filter by Type"
+                                    value={typeFilter}
+                                    onChange={setTypeFilter}
+                                    style={{ width: '100%' }}
+                                >
+                                    <Option value="all">All Types</Option>
+                                    <Option value="requirement_conflict">Requirement Conflict</Option>
+                                    <Option value="resource_conflict">Resource Conflict</Option>
+                                    <Option value="timeline_conflict">Timeline Conflict</Option>
+                                    <Option value="stakeholder_conflict">Stakeholder Conflict</Option>
+                                </Select>
                 </Col>
-            </Row>
-
-            {/* Filters */}
-            <Card style={{ marginBottom: '24px' }}>
-                <Row gutter={[16, 16]}>
                     <Col xs={24} sm={8}>
                         <Input
                             placeholder="Search conflicts..."
@@ -363,36 +477,13 @@ const ConflictsPage: React.FC = () => {
                             onChange={(e) => setSearchText(e.target.value)}
                         />
                     </Col>
-                    <Col xs={24} sm={8}>
-                        <Select
-                            placeholder="Filter by negotiation"
-                            value={selectedNegotiation}
-                            onChange={setSelectedNegotiation}
-                            style={{ width: '100%' }}
-                        >
-                            <Option value="all">All Negotiations</Option>
-                            {negotiations.map(negotiation => (
-                                <Option key={negotiation._id} value={negotiation._id}>
-                                    {negotiation._id.slice(-8)} - {negotiation.status}
-                                </Option>
-                            ))}
-                        </Select>
-                    </Col>
-                    <Col xs={24} sm={8}>
-                        <RangePicker
-                            placeholder={['Start Date', 'End Date']}
-                            value={dateRange}
-                            onChange={setDateRange}
-                            style={{ width: '100%' }}
-                        />
-                    </Col>
                 </Row>
             </Card>
 
             {/* Conflicts Table */}
             <Card>
                 <Table
-                    columns={columns}
+                            columns={conflictColumns}
                     dataSource={filteredConflicts.map(c => ({ ...c, key: c._id }))}
                     loading={loading}
                     pagination={{
@@ -404,62 +495,98 @@ const ConflictsPage: React.FC = () => {
                     scroll={{ x: 1200 }}
                 />
             </Card>
+                </TabPane>
 
-            {/* Conflict Details Modal */}
+                <TabPane tab="Proposals by Role" key="proposals">
+                    <Card>
+                        <Collapse>
+                            {renderProposalsByRole()}
+                        </Collapse>
+                    </Card>
+                </TabPane>
+
+                <TabPane tab="Analytics" key="analytics">
+                    <Card>
+                        {renderConflictCharts()}
+                    </Card>
+                </TabPane>
+            </Tabs>
+
+            {/* Conflict Detail Modal */}
             <Modal
-                title={`Conflict Details - ${selectedConflict?._id.slice(-8)}`}
+                title="Conflict Details"
                 open={modalVisible}
                 onCancel={() => setModalVisible(false)}
-                footer={null}
-                width={600}
+                footer={[
+                    <Button key="close" onClick={() => setModalVisible(false)}>
+                        Close
+                    </Button>
+                ]}
+                width={800}
             >
                 {selectedConflict && (
                     <div>
-                        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                        <Row gutter={[16, 16]}>
                             <Col span={12}>
-                                <Card size="small">
-                                    <Statistic 
-                                        title="Type" 
-                                        value={selectedConflict.type.replace('_', ' ').toUpperCase()} 
-                                    />
-                                </Card>
+                                <Text strong>Type:</Text>
+                                <br />
+                                <Tag color={getTypeColor(selectedConflict.type)}>
+                                    {selectedConflict.type?.replace('_', ' ').toUpperCase()}
+                                </Tag>
                             </Col>
                             <Col span={12}>
-                                <Card size="small">
-                                    <Statistic 
-                                        title="Severity" 
-                                        value={selectedConflict.severity.toUpperCase()} 
-                                        valueStyle={{ 
-                                            color: getSeverityColor(selectedConflict.severity) === 'red' ? '#f5222d' : 
-                                                   getSeverityColor(selectedConflict.severity) === 'orange' ? '#faad14' : '#52c41a'
-                                        }}
-                                    />
-                                </Card>
+                                <Text strong>Status:</Text>
+                                <br />
+                                <Tag color={getStatusColor(selectedConflict.status)}>
+                                    {selectedConflict.status?.toUpperCase()}
+                                </Tag>
                             </Col>
                         </Row>
 
-                        <Card title="Description" size="small" style={{ marginBottom: '16px' }}>
-                            <p>{selectedConflict.description}</p>
-                        </Card>
+                        <Divider />
 
-                        <Card title="Details" size="small">
-                            <List
-                                dataSource={[
-                                    { label: 'Status', value: selectedConflict.status.toUpperCase() },
-                                    { label: 'Round Number', value: selectedConflict.roundNumber || 'N/A' },
-                                    { label: 'Detected At', value: new Date(selectedConflict.detectedAt).toLocaleString() },
-                                    { label: 'Resolved At', value: selectedConflict.resolvedAt ? new Date(selectedConflict.resolvedAt).toLocaleString() : 'Not resolved' }
-                                ]}
-                                renderItem={(item) => (
-                                    <List.Item>
-                                        <List.Item.Meta
-                                            title={item.label}
-                                            description={item.value}
-                                        />
-                                    </List.Item>
-                                )}
-                            />
-                        </Card>
+                        <div style={{ marginBottom: '16px' }}>
+                            <Text strong>Description:</Text>
+                            <br />
+                            <Text>{selectedConflict.description}</Text>
+                        </div>
+
+                        {selectedConflict.proposalId && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <Text strong>Proposal:</Text>
+                                <br />
+                                <Text>{(selectedConflict.proposalId as any)?.title || 'N/A'}</Text>
+                            </div>
+                        )}
+
+                        {(selectedConflict as any).stakeholders && (selectedConflict as any).stakeholders.length > 0 && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <Text strong>Involved Stakeholders:</Text>
+                                <br />
+                                <div style={{ marginTop: '8px' }}>
+                                    {(selectedConflict as any).stakeholders.map((stakeholder: any, index: number) => (
+                                        <Tag key={index} color={getRoleColor(stakeholder.role)}>
+                                            <UserOutlined /> {stakeholder.name} ({stakeholder.role})
+                                        </Tag>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <Row gutter={[16, 16]}>
+                            <Col span={12}>
+                                <Text strong>Detected At:</Text>
+                                <br />
+                                <Text>{new Date(selectedConflict.detectedAt).toLocaleString()}</Text>
+                            </Col>
+                            {selectedConflict.resolvedAt && (
+                                <Col span={12}>
+                                    <Text strong>Resolved At:</Text>
+                                    <br />
+                                    <Text>{new Date(selectedConflict.resolvedAt).toLocaleString()}</Text>
+                                </Col>
+                            )}
+                        </Row>
                     </div>
                 )}
             </Modal>
@@ -468,4 +595,3 @@ const ConflictsPage: React.FC = () => {
 };
 
 export default ConflictsPage;
-

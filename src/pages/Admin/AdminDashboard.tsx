@@ -42,48 +42,68 @@ const AdminDashboard: React.FC = () => {
     const [conflicts, setConflicts] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-    useEffect(() => {
-        const fetchAllData = async () => {
-            try {
+    const fetchAllData = async (showLoading = true) => {
+        try {
+            if (showLoading) {
                 setLoading(true);
-                setError(null);
-                
-                // Fetch basic data first
-                const [statsData, proposalsData] = await Promise.all([
-                    getComprehensiveDashboardStats(),
-                    getAllProposals()
-                ]);
+            }
+            setError(null);
+            
+            // Fetch basic data first
+            const [statsData, proposalsData] = await Promise.all([
+                getComprehensiveDashboardStats(),
+                getAllProposals()
+            ]);
 
-                setStats(statsData);
-                setProposals(proposalsData);
+            setStats(statsData);
+            setProposals(proposalsData);
 
-                // Try to fetch additional data, but don't fail if they don't exist
-                try {
-                    const negotiationsData = await getAllNegotiations();
-                    setNegotiations(negotiationsData);
-                } catch (err) {
-                    console.warn("Could not fetch negotiations:", err);
-                    setNegotiations([]);
-                }
+            // Try to fetch additional data, but don't fail if they don't exist
+            try {
+                const negotiationsData = await getAllNegotiations();
+                console.log("Dashboard negotiations:", negotiationsData.length, "negotiations");
+                setNegotiations(negotiationsData);
+            } catch (err) {
+                console.warn("Could not fetch negotiations:", err);
+                setNegotiations([]);
+            }
 
-                try {
-                    const conflictsData = await getConflictsAggregate();
-                    setConflicts(conflictsData);
-                } catch (err) {
-                    console.warn("Could not fetch conflicts:", err);
-                    setConflicts(null);
-                }
+            try {
+                const conflictsData = await getConflictsAggregate();
+                setConflicts(conflictsData);
+            } catch (err) {
+                console.warn("Could not fetch conflicts:", err);
+                setConflicts(null);
+            }
 
-
-            } catch (err: any) {
-                console.error("Failed to load admin dashboard data:", err);
-                setError(err.message || 'An unknown error occurred.');
-            } finally {
+        } catch (err: any) {
+            console.error("Failed to load admin dashboard data:", err);
+            setError(err.message || 'An unknown error occurred.');
+        } finally {
+            if (showLoading) {
                 setLoading(false);
             }
-        };
+            setLastUpdated(new Date());
+        }
+    };
+
+    useEffect(() => {
         fetchAllData();
+        
+        // Set up auto-refresh every 30 seconds
+        const interval = setInterval(() => {
+            console.log('Auto-refreshing dashboard data...');
+            setIsRefreshing(true);
+            fetchAllData(false).finally(() => {
+                setIsRefreshing(false);
+            }); // Don't show loading spinner for auto-refresh
+        }, 30000); // 30 seconds
+
+        // Cleanup interval on component unmount
+        return () => clearInterval(interval);
     }, []);
 
     if (loading) {
@@ -99,6 +119,15 @@ const AdminDashboard: React.FC = () => {
     }
 
     // --- Data processing for the charts ---
+    console.log("Processing data for charts:", {
+        proposals: proposals.length,
+        negotiations: negotiations.length,
+        sampleProposal: proposals[0],
+        sampleNegotiation: negotiations[0],
+        negotiationStatuses: negotiations.map(n => n.status),
+        negotiationMetrics: negotiations.map(n => n.metrics)
+    });
+    
     const proposalStatusData = proposals.reduce((acc, p) => {
         const status = p.status.replace('_', ' ');
         const capitalizedStatus = status.charAt(0).toUpperCase() + status.slice(1);
@@ -111,25 +140,76 @@ const AdminDashboard: React.FC = () => {
         return acc;
     }, [] as { status: string; count: number }[]);
 
-    const negotiationStatusData = negotiations.reduce((acc, n) => {
-        const status = n.status.replace('_', ' ');
-        const capitalizedStatus = status.charAt(0).toUpperCase() + status.slice(1);
-        const existing = acc.find(item => item.status === capitalizedStatus);
+    // Process proposal distribution by role
+    const proposalRoleData = proposals.reduce((acc, p) => {
+        // Try multiple ways to get the role
+        let role = p.submittedBy?.role;
+        
+        // If still no role, try to get it from the populated submittedBy object
+        if (!role && p.submittedBy && typeof p.submittedBy === 'object') {
+            role = p.submittedBy.role;
+        }
+        
+        // Default to 'student' if no role found (since we know all users have roles)
+        if (!role) {
+            role = 'student';
+        }
+        
+        const roleDisplay = role === 'it_staff' ? 'IT Staff' : 
+                           role === 'faculty' ? 'Faculty' : 
+                           role === 'student' ? 'Student' : 
+                           role.charAt(0).toUpperCase() + role.slice(1);
+        
+        const existing = acc.find(item => item.role === roleDisplay);
         if (existing) {
             existing.count += 1;
         } else {
-            acc.push({ status: capitalizedStatus, count: 1 });
+            acc.push({ role: roleDisplay, count: 1 });
+        }
+        return acc;
+    }, [] as { role: string; count: number }[]);
+
+    // Debug logging for role data
+    console.log('Proposal role data processing:', {
+        totalProposals: proposals.length,
+        sampleProposal: proposals[0],
+        roleData: proposalRoleData
+    });
+
+    const negotiationStatusData = negotiations.reduce((acc, n) => {
+        // Handle different status formats
+        let status = n.status;
+        if (status === 'completed') {
+            status = 'completed';
+        } else {
+            status = status.replace('_', ' ') as any;
+            status = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+        
+        const existing = acc.find(item => item.status === status);
+        if (existing) {
+            existing.count += 1;
+        } else {
+            acc.push({ status: status, count: 1 });
         }
         return acc;
     }, [] as { status: string; count: number }[]);
 
-    const performanceData = negotiations.map(n => ({
-        negotiationId: n._id.slice(-6),
-        ttc: n.metrics.ttcSeconds || 0,
-        rounds: n.metrics.rounds || 0,
-        satisfaction: n.metrics.ssMean || 0,
-        success: n.metrics.resolutionSuccess ? 1 : 0
-    }));
+    const performanceData = negotiations.map(n => {
+        // Try different possible TTC fields
+        const ttc = n.metrics?.ttcSeconds || (n.metrics?.ttcMs ? n.metrics.ttcMs / 1000 : 0) || 0;
+        const rounds = n.metrics?.rounds || 0;
+        const satisfaction = n.metrics?.ssMean || 0;
+        const success = n.metrics?.resolutionSuccess ? 1 : 0;
+        
+        return {
+            negotiationId: n._id.slice(-6),
+            ttc: ttc,
+            rounds: rounds,
+            satisfaction: satisfaction,
+            success: success
+        };
+    });
 
     const recentProposalsColumns = [
         { title: 'Title', dataIndex: 'title', key: 'title', render: (text: string, record: Proposal) => <Link to={`/admin/proposals/${record._id}`}>{text}</Link> },
@@ -188,10 +268,21 @@ const AdminDashboard: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
                     <Title level={2}>Administrator Dashboard</Title>
-                    <Paragraph type="secondary">Comprehensive business intelligence overview of the blockchain negotiation system.</Paragraph>
+                    <Paragraph type="secondary">
+                        Comprehensive business intelligence overview of the blockchain negotiation system.
+                        <br />
+                        <small style={{ color: '#666' }}>
+                            Last updated: {lastUpdated.toLocaleString()} • Auto-refresh every 30 seconds
+                            {isRefreshing && <span style={{ color: '#1890ff', marginLeft: '8px' }}>🔄 Refreshing...</span>}
+                        </small>
+                    </Paragraph>
                 </div>
                 <Space>
-                    <Button icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
+                    <Button 
+                        icon={<ReloadOutlined spin={loading} />} 
+                        onClick={() => fetchAllData()}
+                        loading={loading}
+                    >
                         Refresh
                     </Button>
                     <Button icon={<DownloadOutlined />} onClick={() => handleExportData('proposals')}>
@@ -294,11 +385,36 @@ const AdminDashboard: React.FC = () => {
                             yField="status" 
                             seriesField="status" 
                             legend={{ position: 'top-left' }} 
-                            height={250}
+                            height={300}
                             color={['#1890ff', '#52c41a', '#faad14', '#f5222d']}
                         />
                     </Card>
                 </Col>
+                <Col xs={24} lg={12}>
+                    <Card title="Active Stakeholders" extra={<Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={() => fetchAllData()} loading={loading}>Refresh</Button>}>
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '48px', color: '#1890ff', marginBottom: '16px' }}>
+                                <TeamOutlined />
+                            </div>
+                            <Title level={3}>{stats?.activeUsers || 0} Active Stakeholders</Title>
+                            <Paragraph type="secondary">
+                                Real-time distribution across Student, Faculty, and IT Staff roles for comprehensive requirement negotiation research.
+                            </Paragraph>
+                            <div style={{ marginTop: '20px' }}>
+                                <Tag color="blue" style={{ margin: '4px' }}>Students: {proposalRoleData.find(item => item.role === 'Student')?.count || 0} ({((proposalRoleData.find(item => item.role === 'Student')?.count || 0) / (stats?.activeUsers || 1) * 100).toFixed(1)}%)</Tag>
+                                <Tag color="green" style={{ margin: '4px' }}>Faculty: {proposalRoleData.find(item => item.role === 'Faculty')?.count || 0} ({((proposalRoleData.find(item => item.role === 'Faculty')?.count || 0) / (stats?.activeUsers || 1) * 100).toFixed(1)}%)</Tag>
+                                <Tag color="orange" style={{ margin: '4px' }}>IT Staff: {proposalRoleData.find(item => item.role === 'IT Staff')?.count || 0} ({((proposalRoleData.find(item => item.role === 'IT Staff')?.count || 0) / (stats?.activeUsers || 1) * 100).toFixed(1)}%)</Tag>
+                            </div>
+                            <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
+                                Last updated: {lastUpdated.toLocaleTimeString()}
+                            </div>
+                        </div>
+                    </Card>
+                </Col>
+            </Row>
+
+            {/* Negotiation Status Row */}
+            <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
                 <Col xs={24} lg={12}>
                     <Card title="Negotiation Status Distribution" extra={<Button size="small" icon={<DownloadOutlined />} onClick={() => handleExportData('benchmarks')}>Export</Button>}>
                         <Pie 
@@ -307,9 +423,30 @@ const AdminDashboard: React.FC = () => {
                             colorField="status" 
                             radius={0.8} 
                             legend={{ position: 'right' }} 
-                            height={250}
+                            height={300}
                             color={['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1']}
                         />
+                    </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                    <Card title="System Health" extra={<Button size="small" icon={<BarChartOutlined />}>View Details</Button>}>
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '48px', color: '#52c41a', marginBottom: '16px' }}>
+                                <CheckCircleOutlined />
+                            </div>
+                            <Title level={3}>System Status</Title>
+                            <Paragraph type="secondary">
+                                All systems operational with {stats?.totalProposals || 0} proposals and {stats?.negotiationsInProgress || 0} active negotiations.
+                            </Paragraph>
+                            <div style={{ marginTop: '20px' }}>
+                                <Tag color="green" style={{ margin: '4px' }}>Proposals: {stats?.totalProposals || 0}</Tag>
+                                <Tag color="blue" style={{ margin: '4px' }}>Negotiations: {stats?.negotiationsInProgress || 0}</Tag>
+                                <Tag color="orange" style={{ margin: '4px' }}>Conflicts: {stats?.conflicts || 0}</Tag>
+                            </div>
+                            <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
+                                Last updated: {lastUpdated.toLocaleTimeString()}
+                            </div>
+                        </div>
                     </Card>
                 </Col>
             </Row>

@@ -138,7 +138,7 @@ const ViewProposals: React.FC = () => {
                 style={{ marginBottom: '24px' }}
             />
             {/* Card padding is adjusted for mobile view. */}
-            <Card bordered={false} bodyStyle={{ padding: isMobile ? '16px 0' : '24px' }}>
+            <Card variant="borderless" bodyStyle={{ padding: isMobile ? '16px 0' : '24px' }}>
                 {/* The header now stacks vertically on mobile. */}
                 <div style={{ 
                     display: 'flex', 

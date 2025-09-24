@@ -36,7 +36,9 @@ import {
     cancelNegotiation, 
     reopenNegotiation,
     getConflictsByNegotiation,
-    getBenchmarkResults
+    getBenchmarkResults,
+    startAllNegotiations,
+    getAllProposals
 } from '../../services/adminService';
 import type { Negotiation, Conflict, BenchmarkResult } from '../../services/adminService';
 
@@ -48,12 +50,15 @@ const NegotiationsPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedNegotiation, setSelectedNegotiation] = useState<Negotiation | null>(null);
     const [conflicts, setConflicts] = useState<Conflict[]>([]);
+    const [pendingProposals, setPendingProposals] = useState<any[]>([]);
+    const [startingNegotiations, setStartingNegotiations] = useState<boolean>(false);
     const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult | null>(null);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     useEffect(() => {
         fetchNegotiations();
+        fetchPendingProposals();
     }, []);
 
     const fetchNegotiations = async () => {
@@ -71,6 +76,35 @@ const NegotiationsPage: React.FC = () => {
             setLoading(false);
         }
     };
+
+    const fetchPendingProposals = async () => {
+        try {
+            const proposals = await getAllProposals();
+            const pending = proposals.filter(p => p.status === 'pending');
+            console.log("Fetched proposals:", proposals.length);
+            console.log("Pending proposals:", pending.length);
+            setPendingProposals(pending);
+        } catch (err: any) {
+            console.error("Failed to fetch pending proposals:", err);
+            setPendingProposals([]);
+        }
+    };
+
+    const handleStartAllNegotiations = async () => {
+        try {
+            setStartingNegotiations(true);
+            await startAllNegotiations();
+            message.success(`Successfully started negotiations for ${pendingProposals.length} proposals`);
+            await fetchNegotiations();
+            await fetchPendingProposals();
+        } catch (err: any) {
+            console.error("Failed to start negotiations:", err);
+            message.error(err.message || "Failed to start negotiations");
+        } finally {
+            setStartingNegotiations(false);
+        }
+    };
+
 
     const handleAction = async (action: string, negotiationId: string) => {
         try {
@@ -328,9 +362,19 @@ const NegotiationsPage: React.FC = () => {
                     <Title level={2}>Negotiations Management</Title>
                     <Paragraph type="secondary">Manage and monitor all negotiation processes in the system.</Paragraph>
                 </div>
-                <Button icon={<ReloadOutlined />} onClick={fetchNegotiations}>
-                    Refresh
-                </Button>
+                <Space>
+                    <Button 
+                        type="primary" 
+                        icon={<PlayCircleOutlined />} 
+                        onClick={handleStartAllNegotiations}
+                        loading={startingNegotiations}
+                    >
+                        Start All Negotiations ({pendingProposals.length})
+                    </Button>
+                    <Button icon={<ReloadOutlined />} onClick={fetchNegotiations}>
+                        Refresh
+                    </Button>
+                </Space>
             </div>
 
             {/* Statistics Row */}
@@ -361,6 +405,27 @@ const NegotiationsPage: React.FC = () => {
                     </Card>
                 </Col>
             </Row>
+
+            {/* Pending Proposals Alert */}
+            {pendingProposals.length > 0 && (
+                <Alert
+                    message={`${pendingProposals.length} proposals are pending negotiation`}
+                    description="Click 'Start All Negotiations' to begin the negotiation process for all pending proposals."
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: '24px' }}
+                    action={
+                        <Button 
+                            type="primary" 
+                            size="small" 
+                            onClick={handleStartAllNegotiations}
+                            loading={startingNegotiations}
+                        >
+                            Start All Negotiations
+                        </Button>
+                    }
+                />
+            )}
 
             {/* Negotiations Table */}
             <Card>

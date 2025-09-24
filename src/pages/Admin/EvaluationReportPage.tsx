@@ -442,7 +442,7 @@ const EvaluationReportPage: React.FC = () => {
       <>
         <Row gutter={[24, 24]}>
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic
                 title="Time to Consensus (sec)"
                 value={m.timeToConsensus ?? "N/A"}
@@ -453,20 +453,20 @@ const EvaluationReportPage: React.FC = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic title="Negotiation Rounds" value={m.numberOfRounds} prefix={<SyncOutlined />} />
               <Progress className="mt-2" percent={pct((m.numberOfRounds / 10) * 100)} showInfo={false} />
               <div className="text-xs text-gray-500 mt-1">Scale heuristic: 10 rounds</div>
             </Card>
           </Col>
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic title="Utility Gain" value={m.utilityGain} precision={3} prefix={<ArrowUpOutlined />} />
             </Card>
           </Col>
 
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic
                 title="Stakeholder Satisfaction"
                 value={m.stakeholderSatisfaction ?? "N/A"}
@@ -483,7 +483,7 @@ const EvaluationReportPage: React.FC = () => {
           </Col>
 
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic
                 title="Resolution Success Rate"
                 value={m.resolutionSuccessRate}
@@ -495,7 +495,7 @@ const EvaluationReportPage: React.FC = () => {
           </Col>
 
           <Col xs={24} sm={12} lg={8}>
-            <Card bordered={false} className="shadow-sm rounded-lg h-full">
+            <Card variant="outlined" className="shadow-sm rounded-lg h-full">
               <Statistic
                 title="Decision Consistency"
                 value={m.decisionConsistency}
@@ -546,7 +546,7 @@ const EvaluationReportPage: React.FC = () => {
       </Paragraph>
 
       {/* Controls */}
-      <Card bordered={false} className="rounded-lg shadow-md">
+      <Card variant="outlined" className="rounded-lg shadow-md">
         <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col xs={24} md={16} lg={12}>
             <Select<string>
@@ -611,35 +611,35 @@ const EvaluationReportPage: React.FC = () => {
       <Divider />
       <Row gutter={[24, 24]}>
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. TTC (sec)" value={kpis.avgTtc ?? "N/A"} precision={kpis.avgTtc ? 1 : 0} prefix={<ClockCircleOutlined />} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. Rounds" value={kpis.avgRounds ?? "N/A"} precision={kpis.avgRounds ? 1 : 0} prefix={<SyncOutlined />} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. Utility Gain" value={kpis.avgUtility ?? "N/A"} precision={kpis.avgUtility ? 3 : 0} prefix={<ArrowUpOutlined />} />
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. Satisfaction" value={kpis.avgSss ?? "N/A"} precision={2} prefix={<SmileOutlined />} suffix="/ 5" />
             <Progress className="mt-2" percent={pct(((kpis.avgSss || 0) / 5) * 100)} showInfo={false} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. Success Rate" value={kpis.avgSuccess ?? "N/A"} suffix="%" prefix={<CheckSquareOutlined />} />
             <Progress className="mt-2" percent={pct(kpis.avgSuccess || 0)} showInfo={false} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={8}>
-          <Card bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card variant="outlined" className="shadow-sm rounded-lg h-full">
             <Statistic title="Avg. Consistency" value={kpis.avgConsistency ?? "N/A"} suffix="%" prefix={<LikeOutlined />} />
             <Progress className="mt-2" percent={pct(kpis.avgConsistency || 0)} showInfo={false} />
           </Card>
@@ -656,7 +656,7 @@ const EvaluationReportPage: React.FC = () => {
 
       {/* All evaluations table */}
       <Divider />
-      <Card bordered={false} className="rounded-lg shadow-sm">
+      <Card variant="outlined" className="rounded-lg shadow-sm">
         <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
           <Col>
             <Text strong>All Evaluations ({allEvaluations.length})</Text>

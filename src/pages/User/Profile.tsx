@@ -85,7 +85,7 @@ const Profile: React.FC = () => {
             />
             <Row gutter={[24, 24]}>
                 <Col xs={24} lg={8}>
-                    <Card bordered={false} style={{ textAlign: 'center' }}>
+                    <Card variant="borderless" style={{ textAlign: 'center' }}>
                         <Avatar size={128} icon={<UserOutlined />} style={{ backgroundColor: '#27ae60', marginBottom: 24 }} />
                         <Title level={4}>{user?.name}</Title>
                         <Text type="secondary">{user?.email}</Text>
@@ -105,7 +105,7 @@ const Profile: React.FC = () => {
                     </Card>
                 </Col>
                 <Col xs={24} lg={16}>
-                    <Card title="Update Personal Information" bordered={false}>
+                    <Card title="Update Personal Information" variant="borderless">
                         <Form form={updateInfoForm} layout="vertical" onFinish={handleUpdateInfo} requiredMark={false}>
                             <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Please enter your full name.' }]}>
                                 <Input prefix={<UserOutlined />} />
@@ -118,7 +118,7 @@ const Profile: React.FC = () => {
                             </Form.Item>
                         </Form>
                     </Card>
-                    <Card title="Change Password" bordered={false} style={{ marginTop: 24 }}>
+                    <Card title="Change Password" variant="borderless" style={{ marginTop: 24 }}>
                         <Paragraph type="secondary">
                             For security, you will be logged out after successfully changing your password.
                         </Paragraph>

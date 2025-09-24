@@ -254,7 +254,7 @@ const AnalyticsPage: React.FC = () => {
                                         padding="auto"
                                         autoFit={true}
                                         label={{
-                                            position: 'middle'
+                                            position: 'top' as const
                                         }}
                                     />
                                 </div>
@@ -272,7 +272,7 @@ const AnalyticsPage: React.FC = () => {
                                         padding="auto"
                                         autoFit={true}
                                         label={{
-                                            position: 'middle'
+                                            position: 'top' as const
                                         }}
                                     />
                                 </div>

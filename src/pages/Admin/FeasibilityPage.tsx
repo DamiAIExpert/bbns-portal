@@ -35,6 +35,7 @@ import {
     getAllProposals,
     analyzeFeasibility,
     getFeasibilityResults,
+    getAllFeasibilityAnalyses,
     getFeasibilitySummary,
     getCriticalFeasibilityIssues,
     exportFeasibilityCSV
@@ -45,7 +46,7 @@ const { Title, Paragraph } = Typography;
 const { Option } = Select;
 
 const FeasibilityPage: React.FC = () => {
-    const [feasibilityAnalyses] = useState<FeasibilityAnalysis[]>([]);
+    const [feasibilityAnalyses, setFeasibilityAnalyses] = useState<FeasibilityAnalysis[]>([]);
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -68,8 +69,14 @@ const FeasibilityPage: React.FC = () => {
             setError(null);
             
             // Fetch basic data first
-            const proposalsData = await getAllProposals();
+            const [proposalsData, analysesData] = await Promise.all([
+                getAllProposals(),
+                getAllFeasibilityAnalyses()
+            ]);
+            
             setProposals(proposalsData);
+            // Ensure analysesData is always an array
+            setFeasibilityAnalyses(Array.isArray(analysesData) ? analysesData : []);
 
             // Try to fetch additional data, but don't fail if they don't exist
             try {
@@ -107,7 +114,8 @@ const FeasibilityPage: React.FC = () => {
             message.success('Feasibility analysis completed successfully');
             setAnalyzeModalVisible(false);
             form.resetFields();
-            // Refresh data or add to analyses
+            // Refresh data after analysis
+            await fetchData();
         } catch (err: any) {
             console.error("Failed to analyze feasibility:", err);
             message.error(err.message || 'Failed to analyze feasibility');
@@ -376,7 +384,7 @@ const FeasibilityPage: React.FC = () => {
             <Card>
                 <Table
                     columns={columns}
-                    dataSource={feasibilityAnalyses.map(a => ({ ...a, key: a._id }))}
+                    dataSource={Array.isArray(feasibilityAnalyses) ? feasibilityAnalyses.map(a => ({ ...a, key: a._id })) : []}
                     loading={loading}
                     pagination={{
                         pageSize: 10,

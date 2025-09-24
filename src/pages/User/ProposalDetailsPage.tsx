@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 // CORRECTED: The unused 'Link' component has been removed from this import.
 import { useParams } from 'react-router-dom';
-import { Card, Typography, Spin, Alert, Breadcrumb, Descriptions, Tag, Row, Col, Empty, Space, Timeline, Avatar } from 'antd';
-import { HomeOutlined, FileTextOutlined, CalendarOutlined, InfoCircleOutlined, UserOutlined, ClockCircleOutlined, CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, LinkOutlined } from '@ant-design/icons';
+import { Card, Typography, Spin, Alert, Breadcrumb, Descriptions, Tag, Row, Col, Empty, Space, Timeline, Avatar, Button, Modal } from 'antd';
+import { HomeOutlined, FileTextOutlined, CalendarOutlined, InfoCircleOutlined, UserOutlined, ClockCircleOutlined, CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, LinkOutlined, BarChartOutlined } from '@ant-design/icons';
 // CORRECTED: 'Proposal' is a type, so we now use 'import type' to import it.
 import { getProposalById } from '../../services/proposalService';
+import PreferenceElicitation from '../../components/PreferenceElicitation';
 import type { Proposal } from '../../services/proposalService';
+import type { User } from '../../services/authService';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -30,6 +32,9 @@ const ProposalDetailsPage: React.FC = () => {
     const [proposal, setProposal] = useState<Proposal | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [showFullDescription, setShowFullDescription] = useState<boolean>(false);
+    const [preferenceModalVisible, setPreferenceModalVisible] = useState<boolean>(false);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
 
     useEffect(() => {
         if (proposalId) {
@@ -48,6 +53,14 @@ const ProposalDetailsPage: React.FC = () => {
         } else {
             setError("No proposal ID was provided.");
             setLoading(false);
+        }
+        
+        // Load current user
+        try {
+            const storedUser = JSON.parse(localStorage.getItem('user') || 'null');
+            setCurrentUser(storedUser);
+        } catch (e) {
+            console.error('Error loading user:', e);
         }
     }, [proposalId]);
 
@@ -89,7 +102,7 @@ const ProposalDetailsPage: React.FC = () => {
                 {/* Main Content Column */}
                 <Col xs={24} lg={16}>
                     <Space direction="vertical" style={{ width: '100%' }} size="large">
-                        <Card bordered={false}>
+                        <Card variant="borderless">
                             <Title level={3} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                                 <FileTextOutlined style={{ marginRight: '12px' }} />
                                 {proposal.title}
@@ -98,12 +111,24 @@ const ProposalDetailsPage: React.FC = () => {
                                 Requirement ID: {proposal._id}
                             </Paragraph>
 
-                            <Card type="inner" title="Full Requirement Description" style={{ marginTop: 24 }}>
-                               <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{proposal.description}</Paragraph>
+                            <Card type="inner" title="AI Summary" style={{ marginTop: 24 }}>
+                               <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
+                                   {showFullDescription ? proposal.description : (proposal.summary || proposal.description || 'No summary available.')}
+                               </Paragraph>
+                               {proposal.summary && (
+                                   <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f6f6f6', borderRadius: '6px' }}>
+                                       <Text type="secondary" style={{ fontSize: '12px' }}>
+                                           💡 {showFullDescription ? 'Showing full description.' : 'This is an AI-generated summary.'} 
+                                           <Button type="link" size="small" onClick={() => setShowFullDescription(!showFullDescription)}>
+                                               View {showFullDescription ? 'Summary' : 'Full Description'}
+                                           </Button>
+                                       </Text>
+                                   </div>
+                               )}
                             </Card>
                         </Card>
 
-                        <Card bordered={false} title="Negotiation History">
+                        <Card variant="borderless" title="Negotiation History">
                             {proposal.negotiationHistory && proposal.negotiationHistory.length > 0 ? (
                                 <Timeline
                                     items={proposal.negotiationHistory.map(event => ({
@@ -128,7 +153,7 @@ const ProposalDetailsPage: React.FC = () => {
                 {/* Sidebar Column */}
                 <Col xs={24} lg={8}>
                     <Space direction="vertical" style={{ width: '100%' }} size="large">
-                        <Card bordered={false} title="Details">
+                        <Card variant="borderless" title="Details">
                             <Descriptions bordered column={1} size="small">
                                 <Descriptions.Item label={<Space><InfoCircleOutlined />Status</Space>}>
                                     {renderStatusTag(proposal.status)}
@@ -142,39 +167,84 @@ const ProposalDetailsPage: React.FC = () => {
                             </Descriptions>
                         </Card>
 
-                        <Card bordered={false} title="Submitted By">
+                        <Card variant="borderless" title="Actions">
+                            <Button 
+                                type="primary" 
+                                icon={<BarChartOutlined />}
+                                onClick={() => setPreferenceModalVisible(true)}
+                                block
+                            >
+                                Submit Preferences
+                            </Button>
+                        </Card>
+
+                        <Card variant="borderless" title="Submitted By">
                             <Space>
                                 <Avatar icon={<UserOutlined />} />
                                 <div>
                                     <Text strong>{proposal.submittedBy.name}</Text>
+                                    <br/>
+                                    <Text type="secondary" style={{ textTransform: 'capitalize' }}>{proposal.submittedBy.role?.replace('_', ' ') || 'Unknown'}</Text>
                                     <br/>
                                     <Text type="secondary">{proposal.submittedBy.email}</Text>
                                 </div>
                             </Space>
                         </Card>
 
-                        {proposal.blockchainStored && (
-                             <Card bordered={false} title="Blockchain Record">
-                                <Descriptions bordered column={1} size="small">
-                                    <Descriptions.Item label="Status">
+                        <Card variant="borderless" title="Blockchain Record">
+                            <Descriptions bordered column={1} size="small">
+                                <Descriptions.Item label="Status">
+                                    {proposal.blockchainStored ? (
                                         <Tag icon={<CheckCircleOutlined />} color="success">Stored On-Chain</Tag>
+                                    ) : (
+                                        <Tag icon={<ClockCircleOutlined />} color="warning">Pending Storage</Tag>
+                                    )}
+                                </Descriptions.Item>
+                                {proposal.blockchainStored ? (
+                                    <>
+                                        <Descriptions.Item label="Block Number">
+                                            {proposal.blockchainBlockNumber}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Transaction Hash">
+                                            <Text copyable={{ text: proposal.blockchainTxHash }} style={{ maxWidth: '100%' }}>
+                                                <a href={`https://sepolia.etherscan.io/tx/${proposal.blockchainTxHash}`} target="_blank" rel="noopener noreferrer">
+                                                    {`${proposal.blockchainTxHash?.substring(0, 10)}...`} <LinkOutlined />
+                                                </a>
+                                            </Text>
+                                        </Descriptions.Item>
+                                    </>
+                                ) : (
+                                    <Descriptions.Item label="Network">
+                                        <Text type="secondary">Sepolia Testnet</Text>
                                     </Descriptions.Item>
-                                    <Descriptions.Item label="Block Number">
-                                        {proposal.blockchainBlockNumber}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Transaction Hash">
-                                        <Text copyable={{ text: proposal.blockchainTxHash }} style={{ maxWidth: '100%' }}>
-                                            <a href={`https://sepolia.etherscan.io/tx/${proposal.blockchainTxHash}`} target="_blank" rel="noopener noreferrer">
-                                                {`${proposal.blockchainTxHash?.substring(0, 10)}...`} <LinkOutlined />
-                                            </a>
-                                        </Text>
-                                    </Descriptions.Item>
-                                </Descriptions>
-                            </Card>
-                        )}
+                                )}
+                            </Descriptions>
+                        </Card>
                     </Space>
                 </Col>
             </Row>
+            
+            {/* Preference Elicitation Modal */}
+            <Modal
+                title="Preference Elicitation"
+                open={preferenceModalVisible}
+                onCancel={() => setPreferenceModalVisible(false)}
+                footer={null}
+                width={900}
+                destroyOnClose
+            >
+                {currentUser && proposal && (
+                    <PreferenceElicitation
+                        proposalId={proposal._id}
+                        proposalTitle={proposal.title}
+                        user={currentUser}
+                        onSuccess={() => {
+                            setPreferenceModalVisible(false);
+                        }}
+                        onCancel={() => setPreferenceModalVisible(false)}
+                    />
+                )}
+            </Modal>
         </div>
     );
 };

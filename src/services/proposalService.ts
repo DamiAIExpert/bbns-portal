@@ -8,6 +8,7 @@ interface Submitter {
     _id: string;
     name: string;
     email: string;
+    role: string;
 }
 
 // Represents a single stakeholder associated with a proposal
@@ -31,6 +32,9 @@ export interface Proposal {
   _id: string;
   title: string;
   description: string;
+  summary?: string; // AI-generated summary of the proposal
+  summaryId?: string; // Reference to Summary document
+  summaryHash?: string; // Hash of the summary for integrity
   status: 'pending' | 'in_negotiation' | 'finalized' | 'rejected';
   createdAt: string;
   updatedAt: string;
