@@ -126,9 +126,14 @@ const FeasibilityPage: React.FC = () => {
 
     const handleViewDetails = async (analysisId: string) => {
         try {
-            const analysis = await getFeasibilityResults(analysisId);
+            // Find the analysis in our existing data instead of making another API call
+            const analysis = feasibilityAnalyses.find(a => a._id === analysisId);
+            if (analysis) {
             setSelectedAnalysis(analysis);
             setModalVisible(true);
+            } else {
+                message.error('Analysis not found');
+            }
         } catch (err: any) {
             console.error("Failed to fetch analysis details:", err);
             message.error(err.message || 'Failed to fetch analysis details');
@@ -170,9 +175,16 @@ const FeasibilityPage: React.FC = () => {
             title: 'Proposal',
             dataIndex: 'proposalId',
             key: 'proposal',
-            render: (proposalId: string) => {
+            render: (proposalId: any) => {
+                // Handle both object and string formats
+                if (typeof proposalId === 'object' && proposalId !== null) {
+                    return proposalId.title || proposalId._id?.slice(-8) || 'Unknown Proposal';
+                }
+                if (typeof proposalId === 'string') {
                 const proposal = proposals.find(p => p._id === proposalId);
                 return proposal ? proposal.title : proposalId.slice(-8);
+                }
+                return 'Unknown Proposal';
             },
             width: 200
         },
@@ -272,8 +284,8 @@ const FeasibilityPage: React.FC = () => {
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <Title level={2}>Feasibility Analysis Management</Title>
-                    <Paragraph type="secondary">Analyze proposal feasibility across time, cost, complexity, and resource waste dimensions.</Paragraph>
+                    <Title level={2}>Advanced Feasibility Analysis Management</Title>
+                    <Paragraph type="secondary">Comprehensive PhD-level feasibility analysis across technical, business, organizational, and research dimensions. Evaluate software requirements feasibility using advanced algorithms and stakeholder consensus metrics.</Paragraph>
                 </div>
                 <Space>
                     <Button icon={<ReloadOutlined />} onClick={fetchData}>
@@ -334,23 +346,77 @@ const FeasibilityPage: React.FC = () => {
                 </Row>
             )}
 
+            {/* Fallback Statistics when summary is not available */}
+            {!summary && feasibilityAnalyses.length > 0 && (
+                <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
+                    <Col xs={24} sm={6}>
+                        <Card>
+                            <Statistic 
+                                title="Total Analyses" 
+                                value={feasibilityAnalyses.length} 
+                                prefix={<SearchOutlined />} 
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={6}>
+                        <Card>
+                            <Statistic 
+                                title="Avg Feasibility" 
+                                value={`${Math.round((feasibilityAnalyses.reduce((sum, a) => sum + a.overallFeasibility, 0) / feasibilityAnalyses.length) * 100)}%`} 
+                                prefix={<CheckCircleOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={6}>
+                        <Card>
+                            <Statistic 
+                                title="Critical Issues" 
+                                value={feasibilityAnalyses.filter(a => a.riskLevel === 'critical').length} 
+                                prefix={<ExclamationCircleOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={6}>
+                        <Card>
+                            <Statistic 
+                                title="High Risk Proposals" 
+                                value={feasibilityAnalyses.filter(a => ['high', 'critical'].includes(a.riskLevel)).length} 
+                                prefix={<WarningOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                </Row>
+            )}
+
             {/* Risk Distribution Chart */}
-            {summary && (
+            {(summary || feasibilityAnalyses.length > 0) && (
                 <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
                     <Col span={24}>
                         <Card title="Risk Level Distribution" extra={<Button size="small" icon={<DownloadOutlined />} onClick={handleExport}>Export</Button>}>
                             <Pie
-                                data={[
+                                data={summary ? [
                                     { level: 'Low', count: summary.riskDistribution?.low || 0 },
                                     { level: 'Medium', count: summary.riskDistribution?.medium || 0 },
                                     { level: 'High', count: summary.riskDistribution?.high || 0 },
                                     { level: 'Critical', count: summary.riskDistribution?.critical || 0 }
+                                ] : [
+                                    { level: 'Low', count: feasibilityAnalyses.filter(a => a.riskLevel === 'low').length },
+                                    { level: 'Medium', count: feasibilityAnalyses.filter(a => a.riskLevel === 'medium').length },
+                                    { level: 'High', count: feasibilityAnalyses.filter(a => a.riskLevel === 'high').length },
+                                    { level: 'Critical', count: feasibilityAnalyses.filter(a => a.riskLevel === 'critical').length }
                                 ]}
                                 angleField="count"
                                 colorField="level"
                                 radius={0.8}
                                 height={300}
                                 color={['#52c41a', '#faad14', '#f5222d', '#722ed1']}
+                                label={{
+                                    type: 'outer',
+                                    content: '{name}: {percentage}'
+                                }}
+                                legend={{
+                                    position: 'bottom'
+                                }}
                             />
                         </Card>
                     </Col>
@@ -358,12 +424,18 @@ const FeasibilityPage: React.FC = () => {
             )}
 
             {/* Critical Issues Alert */}
-            {criticalIssues && criticalIssues.length > 0 && (
+            {(criticalIssues && criticalIssues.length > 0) || (feasibilityAnalyses.filter(a => a.riskLevel === 'critical').length > 0) && (
                 <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
                     <Col span={24}>
                         <Card title="Critical Issues Requiring Attention" type="inner">
                             <List
-                                dataSource={criticalIssues}
+                                dataSource={criticalIssues && criticalIssues.length > 0 ? criticalIssues : 
+                                    feasibilityAnalyses.filter(a => a.riskLevel === 'critical').map(analysis => ({
+                                        proposalTitle: typeof analysis.proposalId === 'object' ? analysis.proposalId.title : 'Unknown Proposal',
+                                        description: `Critical risk analysis with ${Math.round(analysis.overallFeasibility * 100)}% feasibility score`,
+                                        severity: 'critical'
+                                    }))
+                                }
                                 renderItem={(issue: any) => (
                                     <List.Item>
                                         <List.Item.Meta
@@ -402,7 +474,7 @@ const FeasibilityPage: React.FC = () => {
                 open={analyzeModalVisible}
                 onCancel={() => setAnalyzeModalVisible(false)}
                 footer={null}
-                width={600}
+                width={800}
             >
                 <Form
                     form={form}
@@ -446,12 +518,70 @@ const FeasibilityPage: React.FC = () => {
                     </Form.Item>
 
                     <Form.Item
+                        name="includeStakeholders"
+                        label="Include Stakeholder Analysis"
+                        valuePropName="checked"
+                        initialValue={true}
+                    >
+                        <input type="checkbox" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="includeTechnicalAnalysis"
+                        label="Include Technical Analysis"
+                        valuePropName="checked"
+                        initialValue={true}
+                    >
+                        <input type="checkbox" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="includeBusinessAnalysis"
+                        label="Include Business Analysis"
+                        valuePropName="checked"
+                        initialValue={true}
+                    >
+                        <input type="checkbox" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="includeResearchMetrics"
+                        label="Include Research Metrics"
+                        valuePropName="checked"
+                        initialValue={true}
+                    >
+                        <input type="checkbox" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="analysisDepth"
+                        label="Analysis Depth"
+                        initialValue="comprehensive"
+                    >
+                        <Select>
+                            <Option value="basic">Basic Analysis</Option>
+                            <Option value="standard">Standard Analysis</Option>
+                            <Option value="comprehensive">Comprehensive Analysis</Option>
+                            <Option value="research">Research-Grade Analysis</Option>
+                        </Select>
+                    </Form.Item>
+
+                    <Form.Item
                         name="options"
-                        label="Analysis Options"
+                        label="Advanced Options (JSON)"
                     >
                         <Input.TextArea 
-                            placeholder="JSON options for analysis thresholds (optional)"
-                            rows={3}
+                            placeholder={`{
+  "timeThreshold": 0.5,
+  "costThreshold": 0.5,
+  "complexityThreshold": 0.5,
+  "technicalThreshold": 0.6,
+  "businessThreshold": 0.6,
+  "stakeholderThreshold": 0.7,
+  "riskWeight": 0.3,
+  "feasibilityWeight": 0.7
+}`}
+                            rows={8}
                         />
                     </Form.Item>
 
@@ -474,7 +604,7 @@ const FeasibilityPage: React.FC = () => {
                 open={modalVisible}
                 onCancel={() => setModalVisible(false)}
                 footer={null}
-                width={800}
+                width={1200}
             >
                 {selectedAnalysis && (
                     <div>
@@ -504,7 +634,7 @@ const FeasibilityPage: React.FC = () => {
                                 <Card size="small">
                                     <Statistic 
                                         title="Time Feasibility" 
-                                        value={`${Math.round(selectedAnalysis.dimensions.timeFeasibility * 100)}%`} 
+                                        value={`${Math.round((selectedAnalysis.dimensions.time.score || 0) * 100)}%`} 
                                     />
                                 </Card>
                             </Col>
@@ -512,15 +642,15 @@ const FeasibilityPage: React.FC = () => {
                                 <Card size="small">
                                     <Statistic 
                                         title="Cost Feasibility" 
-                                        value={`${Math.round(selectedAnalysis.dimensions.costFeasibility * 100)}%`} 
+                                        value={`${Math.round((selectedAnalysis.dimensions.cost.score || 0) * 100)}%`} 
                                     />
                                 </Card>
                             </Col>
                             <Col span={6}>
                                 <Card size="small">
                                     <Statistic 
-                                        title="Complexity" 
-                                        value={`${Math.round(selectedAnalysis.dimensions.complexityFeasibility * 100)}%`} 
+                                        title="Complexity Score" 
+                                        value={`${Math.round((selectedAnalysis.dimensions.complexity.score || 0) * 100)}%`} 
                                     />
                                 </Card>
                             </Col>
@@ -528,24 +658,258 @@ const FeasibilityPage: React.FC = () => {
                                 <Card size="small">
                                     <Statistic 
                                         title="Resource Waste" 
-                                        value={`${Math.round(selectedAnalysis.dimensions.resourceWaste * 100)}%`} 
+                                        value={`${Math.round((selectedAnalysis.dimensions.resourceWaste.score || 0) * 100)}%`} 
                                     />
                                 </Card>
                             </Col>
                         </Row>
 
-                        {selectedAnalysis.conflicts.length > 0 && (
-                            <Card title="Conflicts" size="small" style={{ marginBottom: '16px' }}>
+                        {/* Detailed Dimension Analysis */}
+                        <Card title="Detailed Dimension Analysis" size="small" style={{ marginBottom: '16px' }}>
+                            <Row gutter={[16, 16]}>
+                                <Col span={12}>
+                                    <Card size="small" title="Time Analysis">
+                                        <div><strong>Estimated Duration:</strong> {selectedAnalysis.dimensions.time.estimatedDuration} days</div>
+                                        <div><strong>Urgency Level:</strong> {selectedAnalysis.dimensions.time.urgencyLevel}</div>
+                                        <div><strong>Issues:</strong> {selectedAnalysis.dimensions.time.issues.length}</div>
+                                        <div><strong>Time Conflicts:</strong> {selectedAnalysis.dimensions.time.timeConflicts.length}</div>
+                                    </Card>
+                                </Col>
+                                <Col span={12}>
+                                    <Card size="small" title="Cost Analysis">
+                                        <div><strong>Estimated Cost:</strong> ₦{selectedAnalysis.dimensions.cost.estimatedCost.toLocaleString()}</div>
+                                        <div><strong>Cost-Benefit Ratio:</strong> {selectedAnalysis.dimensions.cost.costBenefitRatio.toFixed(2)}</div>
+                                        <div><strong>Issues:</strong> {selectedAnalysis.dimensions.cost.issues.length}</div>
+                                        <div><strong>Budget Conflicts:</strong> {selectedAnalysis.dimensions.cost.budgetConflicts.length}</div>
+                                    </Card>
+                                </Col>
+                            </Row>
+                            <Row gutter={[16, 16]} style={{ marginTop: '16px' }}>
+                                <Col span={12}>
+                                    <Card size="small" title="Complexity Analysis">
+                                        <div><strong>Complexity Level:</strong> {selectedAnalysis.dimensions.complexity.complexityLevel}</div>
+                                        <div><strong>Technical Complexity:</strong> {Math.round(selectedAnalysis.dimensions.complexity.technicalComplexity * 100)}%</div>
+                                        <div><strong>Stakeholder Complexity:</strong> {Math.round(selectedAnalysis.dimensions.complexity.stakeholderComplexity * 100)}%</div>
+                                        <div><strong>Integration Complexity:</strong> {Math.round(selectedAnalysis.dimensions.complexity.integrationComplexity * 100)}%</div>
+                                    </Card>
+                                </Col>
+                                <Col span={12}>
+                                    <Card size="small" title="Resource Waste Analysis">
+                                        <div><strong>Efficiency Score:</strong> {Math.round(selectedAnalysis.dimensions.resourceWaste.efficiencyScore * 100)}%</div>
+                                        <div><strong>Redundancy Level:</strong> {selectedAnalysis.dimensions.resourceWaste.redundancyLevel}</div>
+                                        <div><strong>Waste Indicators:</strong> {selectedAnalysis.dimensions.resourceWaste.wasteIndicators.length}</div>
+                                        <div><strong>Issues:</strong> {selectedAnalysis.dimensions.resourceWaste.issues.length}</div>
+                                    </Card>
+                                </Col>
+                            </Row>
+                        </Card>
+
+                        {/* Research Metrics */}
+                        {selectedAnalysis.researchMetrics && (
+                            <Card title="Research Metrics" size="small" style={{ marginBottom: '16px' }}>
+                                <Row gutter={[16, 16]}>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Feasibility Score" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.feasibilityScore || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Risk Score" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.riskScore || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Success Probability" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.successProbability || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Research Contribution" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.researchContribution || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                </Row>
+                                <Row gutter={[16, 16]} style={{ marginTop: '16px' }}>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Stakeholder Consensus" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.stakeholderConsensus || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Technical Viability" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.technicalViability || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Business Viability" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.businessViability || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Implementation Complexity" 
+                                            value={Math.round((selectedAnalysis.researchMetrics.implementationComplexity || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                </Row>
+                            </Card>
+                        )}
+
+                        {/* Technical Analysis */}
+                        {selectedAnalysis.technicalAnalysis && (
+                            <Card title="Technical Analysis" size="small" style={{ marginBottom: '16px' }}>
+                                <Row gutter={[16, 16]}>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Architecture Complexity" 
+                                            value={Math.round((selectedAnalysis.technicalAnalysis.architectureComplexity || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Technology Maturity" 
+                                            value={Math.round((selectedAnalysis.technicalAnalysis.technologyMaturity || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Integration Complexity" 
+                                            value={Math.round((selectedAnalysis.technicalAnalysis.integrationComplexity || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Technical Debt" 
+                                            value={Math.round((selectedAnalysis.technicalAnalysis.technicalDebt || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                </Row>
+                            </Card>
+                        )}
+
+                        {/* Business Analysis */}
+                        {selectedAnalysis.businessAnalysis && (
+                            <Card title="Business Analysis" size="small" style={{ marginBottom: '16px' }}>
+                                <Row gutter={[16, 16]}>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Market Demand" 
+                                            value={Math.round((selectedAnalysis.businessAnalysis.marketDemand || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Revenue Potential" 
+                                            value={Math.round((selectedAnalysis.businessAnalysis.revenuePotential || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Cost-Benefit Ratio" 
+                                            value={Math.round((selectedAnalysis.businessAnalysis.costBenefitRatio || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Strategic Alignment" 
+                                            value={Math.round((selectedAnalysis.businessAnalysis.strategicAlignment || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                </Row>
+                            </Card>
+                        )}
+
+                        {/* Enhanced Stakeholder Analysis */}
+                        {selectedAnalysis.stakeholderAnalysis && (
+                            <Card title="Stakeholder Analysis" size="small" style={{ marginBottom: '16px' }}>
+                                <Row gutter={[16, 16]}>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Total Stakeholders" 
+                                            value={selectedAnalysis.stakeholderAnalysis.totalStakeholders || 0} 
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Stakeholder Roles" 
+                                            value={selectedAnalysis.stakeholderAnalysis.stakeholderRoles.length || 0} 
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Participation Level" 
+                                            value={Math.round((selectedAnalysis.stakeholderAnalysis.participationLevel || 0) * 100)} 
+                                            suffix="%"
+                                        />
+                                    </Col>
+                                    <Col span={6}>
+                                        <Statistic 
+                                            title="Stakeholder Conflicts" 
+                                            value={selectedAnalysis.stakeholderAnalysis.stakeholderConflicts.length || 0} 
+                                        />
+                                    </Col>
+                                </Row>
+                                
+                                {/* Display Stakeholder Roles */}
+                                {selectedAnalysis.stakeholderAnalysis.stakeholderRoles.length > 0 && (
+                                    <div style={{ marginTop: '16px' }}>
+                                        <strong>Detected Roles:</strong>
+                                        <div style={{ marginTop: '8px' }}>
+                                            {selectedAnalysis.stakeholderAnalysis.stakeholderRoles.map((role, index) => (
+                                                <Tag key={index} color="blue" style={{ margin: '2px' }}>
+                                                    {role}
+                                                </Tag>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </Card>
+                        )}
+
+                        {/* Budget Conflicts Analysis */}
+                        {selectedAnalysis.dimensions.cost.budgetConflicts && selectedAnalysis.dimensions.cost.budgetConflicts.length > 0 && (
+                            <Card title="Budget Conflicts Analysis" size="small" style={{ marginBottom: '16px' }}>
                                 <List
-                                    dataSource={selectedAnalysis.conflicts}
+                                    dataSource={selectedAnalysis.dimensions.cost.budgetConflicts}
                                     renderItem={(conflict, index) => (
                                         <List.Item key={index}>
                                             <List.Item.Meta
-                                                title={conflict.type}
-                                                description={conflict.description}
+                                                title={conflict.message}
+                                                description={
+                                                    <div>
+                                                        <div><strong>Type:</strong> {conflict.type}</div>
+                                                        <div><strong>Severity:</strong> {conflict.severity}</div>
+                                                        <div><strong>Impact:</strong> {conflict.impact}</div>
+                                                        <div><strong>Resolution:</strong> {conflict.resolution}</div>
+                                                        <div><strong>Indicators:</strong> {conflict.indicators.join(', ')}</div>
+                                                    </div>
+                                                }
                                             />
                                             <Tag color={conflict.severity === 'high' ? 'red' : conflict.severity === 'medium' ? 'orange' : 'green'}>
-                                                {conflict.severity}
+                                                {conflict.severity.toUpperCase()}
                                             </Tag>
                                         </List.Item>
                                     )}
@@ -553,7 +917,46 @@ const FeasibilityPage: React.FC = () => {
                             </Card>
                         )}
 
-                        {selectedAnalysis.recommendations.length > 0 && (
+                        {/* Waste Events Analysis */}
+                        {selectedAnalysis.wasteEvents && selectedAnalysis.wasteEvents.length > 0 && (
+                            <Card title="Waste Events Analysis" size="small" style={{ marginBottom: '16px' }}>
+                                <List
+                                    dataSource={selectedAnalysis.wasteEvents}
+                                    renderItem={(event, index) => (
+                                        <List.Item key={index}>
+                                            <List.Item.Meta
+                                                title={`Waste Event #${index + 1}`}
+                                                description={`Type: ${event.type}`}
+                                            />
+                                            <Tag color="orange">WASTE</Tag>
+                                        </List.Item>
+                                    )}
+                                />
+                            </Card>
+                        )}
+
+                        {selectedAnalysis.conflicts && selectedAnalysis.conflicts.length > 0 && (
+                            <Card title="Conflicts Analysis" size="small" style={{ marginBottom: '16px' }}>
+                                <List
+                                    dataSource={selectedAnalysis.conflicts}
+                                    renderItem={(conflict, index) => (
+                                        <List.Item key={index}>
+                                            <List.Item.Meta
+                                                title={conflict.type}
+                                                description={conflict.message}
+                                            />
+                                            <div>
+                                            <Tag color={conflict.severity === 'high' ? 'red' : conflict.severity === 'medium' ? 'orange' : 'green'}>
+                                                    {conflict.severity.toUpperCase()}
+                                            </Tag>
+                                            </div>
+                                        </List.Item>
+                                    )}
+                                />
+                            </Card>
+                        )}
+
+                        {selectedAnalysis.recommendations && selectedAnalysis.recommendations.length > 0 && (
                             <Card title="Recommendations" size="small">
                                 <List
                                     dataSource={selectedAnalysis.recommendations}
@@ -561,7 +964,14 @@ const FeasibilityPage: React.FC = () => {
                                         <List.Item key={index}>
                                             <List.Item.Meta
                                                 avatar={<InfoCircleOutlined />}
-                                                description={recommendation}
+                                                title={recommendation.message}
+                                                description={
+                                                    <div>
+                                                        <div><strong>Category:</strong> {recommendation.category}</div>
+                                                        <div><strong>Priority:</strong> {recommendation.priority}</div>
+                                                        <div><strong>Actions:</strong> {recommendation.actions.join(', ')}</div>
+                                                    </div>
+                                                }
                                             />
                                         </List.Item>
                                     )}

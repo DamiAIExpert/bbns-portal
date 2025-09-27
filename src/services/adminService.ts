@@ -66,23 +66,51 @@ export interface Conflict {
   negotiationId: string;
   proposalId?: string;
   type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
+  detector?: string;
+  clauses?: any[];
+  severity: number;
+  description?: string;
   conflictingParties?: any;
   resolution?: string;
+  resolutionMethod?: string;
+  resolutionSummary?: string;
   resolved: boolean;
   detectedAt: string;
   resolvedAt?: string;
   roundNumber?: number;
-  status: 'open' | 'resolved';
+  status?: 'open' | 'resolved';
+  chain?: {
+    txHash?: string | null;
+    blockNumber?: number | null;
+    network?: string | null;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+  __v?: number;
 }
 
 export interface BenchmarkResult {
   _id: string;
-  negotiationId: string;
-  proposalId: string;
+  negotiationId: {
+    _id: string;
+    status: string;
+  };
   mainContribution: {
     method: string;
+    preferences: Array<{
+      stakeholder: string;
+      priorities: {
+        cost: number;
+        timeline: number;
+        quality: number;
+      };
+      role: string;
+    }>;
+    decision: {
+      finalAgreement: string;
+      utility: number;
+      consensus: boolean;
+    };
     ttcSeconds: number;
     rounds: number;
     resolutionSuccess: boolean;
@@ -93,70 +121,190 @@ export interface BenchmarkResult {
     conflictsResolved: number;
     fairnessJain: number;
     participationGini: number;
+    timestamp: string;
   };
   benchmarks: Array<{
     method: string;
     elicitationMethod: string;
     decisionMethod: string;
+    preferences: Array<{
+      stakeholder: string;
+      priorities: {
+        cost: number;
+        timeline: number;
+        quality: number;
+      };
+      role: string;
+    }>;
+    decision: {
+      finalAgreement: string;
+      utility: number;
+      consensus: boolean;
+    };
     ttcSeconds: number;
+    rounds: number;
     resolutionSuccess: boolean;
+    ssMean: number;
+    ssN: number;
+    utilityGain: number;
+    conflictsCount: number;
+    conflictsResolved: number;
+    fairnessJain: number;
+    participationGini: number;
+    error?: string | null;
+    _id?: string;
+    timestamp: string;
   }>;
   metrics: {
     comparison: {
-      ttcComparison: {
-        mainTTC: number;
-        averageBenchmarkTTC: number;
-        fastestBenchmark: number;
-        slowestBenchmark: number;
-      };
-      resolutionSuccessComparison: {
-        mainSuccess: boolean;
-        benchmarkSuccessRate: number;
-        successfulBenchmarks: number;
-      };
+      methodEffectiveness: any[];
     };
+    benchmarks: any[];
   };
+  proposalId: string;
   stakeholderCount: number;
   stakeholderRoles: string[];
   blockchainAnchored: boolean;
-  blockchainTxHash?: string;
+  blockchainTxHash?: string | null;
+  blockchainBlockNumber?: number | null;
   analysisComplete: boolean;
   analysisNotes?: string;
   createdAt: string;
   updatedAt: string;
+  __v?: number;
 }
 
 export interface FeasibilityAnalysis {
   _id: string;
-  proposalId: string;
-  negotiationId?: string;
+  proposalId: string | {
+    _id: string;
+    title: string;
+    description: string;
+    status: string;
+  };
+  negotiationId?: string | null;
   analysisType: 'initial' | 'revision' | 'final';
+  analyzedBy: string;
   overallFeasibility: number;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   dimensions: {
-    timeFeasibility: number;
-    costFeasibility: number;
-    complexityFeasibility: number;
-    resourceWaste: number;
+    time: {
+      score: number;
+      issues: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        conflicts: any[];
+        _id: string;
+      }>;
+      estimatedDuration: number;
+      timeConflicts: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        indicators: string[];
+        resolution: string;
+      }>;
+      urgencyLevel: string;
+    };
+    cost: {
+      score: number;
+      issues: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        estimatedCost?: number;
+        ratio?: number;
+        indicators: string[];
+        _id: string;
+      }>;
+      estimatedCost: number;
+      budgetConflicts: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        indicators: string[];
+        resolution: string;
+      }>;
+      costBenefitRatio: number;
+    };
+    complexity: {
+      score: number;
+      issues: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        technicalComplexity?: number;
+        stakeholderComplexity?: number;
+        integrationComplexity?: number;
+        conflicts: any[];
+        _id: string;
+      }>;
+      complexityLevel: string;
+      technicalComplexity: number;
+      stakeholderComplexity: number;
+      integrationComplexity: number;
+    };
+    resourceWaste: {
+      score: number;
+      issues: Array<{
+        type: string;
+        severity: string;
+        message: string;
+        impact: string;
+        indicators: string[];
+        _id: string;
+      }>;
+      wasteIndicators: string[];
+      efficiencyScore: number;
+      redundancyLevel: number;
+    };
   };
   conflicts: Array<{
     type: string;
     severity: string;
-    description: string;
-    stakeholders?: string[];
+    message: string;
+    stakeholders: string[];
+    _id: string;
   }>;
-  recommendations: string[];
+  recommendations: Array<{
+    category: string;
+    priority: string;
+    message: string;
+    actions: string[];
+    _id: string;
+  }>;
   stakeholderAnalysis: {
     totalStakeholders: number;
     stakeholderRoles: string[];
-    stakeholderConflicts: any[];
+    stakeholderConflicts: Array<{
+      type: string;
+      severity: string;
+      message: string;
+      impact: string;
+      indicators: string[];
+      resolution: string;
+    }>;
     participationLevel: number;
   };
-  wasteEvents: any[];
+  wasteEvents: Array<{
+    type: string;
+    _id: string;
+  }>;
+  analysisVersion: string;
   analysisNotes: string;
-  status: 'completed' | 'pending' | 'failed';
+  blockchainAnchored: boolean;
+  status: string;
+  analyzedAt: string;
   createdAt: string;
   updatedAt: string;
+  expiresAt: string;
+  __v: number;
 }
 
 export interface FeedbackAnalytics {
@@ -561,18 +709,31 @@ export const runBenchmarking = async (proposalId: string, stakeholderIds: string
 
 export const getAllBenchmarkResults = async (): Promise<BenchmarkResult[]> => {
   try {
-    const res = await api.get<BenchmarkResult[]>('/benchmarking/results');
-    return res.data;
+    const res = await api.get<{
+      success: boolean;
+      message: string;
+      timestamp: string;
+      data: BenchmarkResult[];
+    }>('/benchmarking/results');
+    return res.data.data;
   } catch (error: any) {
     console.error("Error fetching all benchmark results:", error);
     throw new Error(extractError(error, "Failed to fetch benchmark results."));
   }
 };
 
-export const getBenchmarkResults = async (negotiationId: string): Promise<BenchmarkResult> => {
+export const getBenchmarkResults = async (benchmarkId: string): Promise<BenchmarkResult> => {
   try {
-    const res = await api.get<BenchmarkResult>(`/benchmarking/results/${negotiationId}`);
-    return res.data;
+    // First try to get by benchmark ID
+    try {
+      const res = await api.get<BenchmarkResult>(`/benchmarking/results/${benchmarkId}`);
+      return res.data;
+    } catch (error) {
+      // If that fails, try to get by negotiation ID
+      console.warn("Failed to fetch by benchmark ID, trying negotiation ID:", error);
+      const res = await api.get<BenchmarkResult>(`/benchmarking/results/negotiation/${benchmarkId}`);
+      return res.data;
+    }
   } catch (error: any) {
     console.error("Error fetching benchmark results:", error);
     throw new Error(extractError(error, "Failed to fetch benchmark results."));
@@ -642,8 +803,8 @@ export const analyzeFeasibility = async (proposalId: string, analysisType: 'init
       includeStakeholders,
       options
     });
-    // Extract data from the wrapped response
-    return res.data?.data || res.data;
+    // Extract data from the wrapped response structure: { statusCode, response: { success, message, data } }
+    return res.data?.response?.data || res.data?.data || res.data;
   } catch (error: any) {
     console.error("Error analyzing feasibility:", error);
     throw new Error(extractError(error, "Failed to analyze feasibility."));
@@ -653,8 +814,8 @@ export const analyzeFeasibility = async (proposalId: string, analysisType: 'init
 export const getFeasibilityResults = async (proposalId: string): Promise<FeasibilityAnalysis> => {
   try {
     const res = await api.get(`/feasibility/results/${proposalId}`);
-    // Extract data from the wrapped response
-    return res.data?.data || res.data;
+    // Extract data from the wrapped response structure: { statusCode, response: { success, message, data } }
+    return res.data?.response?.data || res.data?.data || res.data;
   } catch (error: any) {
     console.error("Error fetching feasibility results:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility results."));
@@ -664,8 +825,8 @@ export const getFeasibilityResults = async (proposalId: string): Promise<Feasibi
 export const getAllFeasibilityAnalyses = async (): Promise<FeasibilityAnalysis[]> => {
   try {
     const res = await api.get("/feasibility/all");
-    // Extract data from the wrapped response
-    return res.data?.data || res.data || [];
+    // Extract data from the wrapped response structure: { statusCode, response: { success, message, data } }
+    return res.data?.response?.data || res.data?.data || res.data || [];
   } catch (error: any) {
     console.error("Error fetching all feasibility analyses:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility analyses."));
@@ -675,8 +836,8 @@ export const getAllFeasibilityAnalyses = async (): Promise<FeasibilityAnalysis[]
 export const getFeasibilitySummary = async () => {
   try {
     const res = await api.get("/feasibility/summary");
-    // Extract data from the wrapped response
-    return res.data?.data || res.data || null;
+    // Extract data from the wrapped response structure: { statusCode, response: { success, message, data } }
+    return res.data?.response?.data || res.data?.data || res.data || null;
   } catch (error: any) {
     console.error("Error fetching feasibility summary:", error);
     throw new Error(extractError(error, "Failed to fetch feasibility summary."));
@@ -686,8 +847,8 @@ export const getFeasibilitySummary = async () => {
 export const getCriticalFeasibilityIssues = async () => {
   try {
     const res = await api.get("/feasibility/critical");
-    // Extract data from the wrapped response
-    return res.data?.data || res.data || [];
+    // Extract data from the wrapped response structure: { statusCode, response: { success, message, data } }
+    return res.data?.response?.data || res.data?.data || res.data || [];
   } catch (error: any) {
     console.error("Error fetching critical feasibility issues:", error);
     throw new Error(extractError(error, "Failed to fetch critical feasibility issues."));

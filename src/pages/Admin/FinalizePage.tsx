@@ -18,6 +18,18 @@ import {
   Empty,
   Segmented,
   Badge,
+  Card,
+  Statistic,
+  Progress,
+  Alert,
+  Tabs,
+  Modal,
+  Form,
+  Switch,
+  Slider,
+  Rate,
+  Spin,
+  Descriptions,
 } from 'antd';
 import {
   CheckCircleOutlined,
@@ -31,7 +43,18 @@ import {
   FileWordOutlined,
   FileMarkdownOutlined,
   ExperimentOutlined,
+  SettingOutlined,
+  BarChartOutlined,
+  DashboardOutlined,
+  TeamOutlined,
+  ExclamationCircleOutlined,
+  InfoCircleOutlined,
+  SyncOutlined,
+  ThunderboltOutlined,
+  RocketOutlined,
+  StarOutlined,
 } from '@ant-design/icons';
+import { Pie, Column } from '@ant-design/plots';
 import dayjs, { Dayjs } from 'dayjs';
 
 import api from '../../services/api';
@@ -43,7 +66,7 @@ import {
   exportConsolidated,
 } from '../../services/finalService';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
 type Status = 'pending' | 'processed' | 'negotiating' | 'finalized';
@@ -56,7 +79,35 @@ interface ProposalRow {
   submitter?: { _id: string; name?: string; email?: string } | null;
   createdAt?: string;
   updatedAt?: string;
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+  category?: string;
+  stakeholders?: any[];
+  conflicts?: any[];
+  requirements?: any[];
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  progress?: number;
+  quality?: number;
+  complexity?: number;
 }
+
+interface AnalyticsData {
+  totalProposals: number;
+  finalizedProposals: number;
+  pendingProposals: number;
+  negotiatingProposals: number;
+  averageQuality: number;
+  totalStakeholders: number;
+  totalConflicts: number;
+  totalRequirements: number;
+  riskDistribution: Record<string, number>;
+  categoryDistribution: Record<string, number>;
+  priorityDistribution: Record<string, number>;
+  timelineData: any[];
+  qualityTrends: any[];
+  stakeholderEngagement: any[];
+  conflictResolution: any[];
+}
+
 
 /* -------------------------------- UI helpers ------------------------------- */
 const StatusTag: React.FC<{ status: Status }> = ({ status }) => {
@@ -98,6 +149,17 @@ const FinalizePage: React.FC = () => {
   const [rowLoadingId, setRowLoadingId] = useState<string | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
+  /* ----------------------- enhanced state ----------------------- */
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [realTimeUpdates, setRealTimeUpdates] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(30);
+  const [selectedProposal, setSelectedProposal] = useState<ProposalRow | null>(null);
+  const [proposalDetailsVisible, setProposalDetailsVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [analyticsVisible, setAnalyticsVisible] = useState(false);
+
   /* ---------------- preview drawer (single artifact) ---------------- */
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTitle, setPreviewTitle] = useState('');
@@ -134,18 +196,31 @@ const FinalizePage: React.FC = () => {
     setLoading(true);
     try {
       const data = await fetchAdminProposals(apiParams);
-      setRows(
-        (data.proposals || []).map((p) => ({
-          _id: p._id,
-          title: p.title,
-          status: (p.status as Status) || 'pending',
-          negotiationId: p.negotiationId ?? null,
-          submitter: p.submitter || null,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
-        })),
-      );
+      const enhancedProposals = (data.proposals || []).map((p) => ({
+        _id: p._id,
+        title: p.title,
+        status: (p.status as Status) || 'pending',
+        negotiationId: p.negotiationId ?? null,
+        submitter: p.submitter || null,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        priority: p.priority || 'medium',
+        category: p.category || 'general',
+        stakeholders: p.stakeholders || [],
+        conflicts: p.conflicts || [],
+        requirements: p.requirements || [],
+        riskLevel: p.riskLevel || 'medium',
+        progress: p.progress || 0,
+        quality: p.quality || 0,
+        complexity: p.complexity || 0,
+      }));
+      
+      setRows(enhancedProposals);
       setTotal(data.total ?? 0);
+      
+      // Load analytics data
+      await loadAnalytics();
+      
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to load proposals.');
     } finally {
@@ -153,9 +228,71 @@ const FinalizePage: React.FC = () => {
     }
   }, [apiParams]);
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      // Simulate analytics data - in real implementation, this would come from API
+      const mockAnalytics: AnalyticsData = {
+        totalProposals: rows.length,
+        finalizedProposals: rows.filter(r => r.status === 'finalized').length,
+        pendingProposals: rows.filter(r => r.status === 'pending').length,
+        negotiatingProposals: rows.filter(r => r.status === 'negotiating').length,
+        averageQuality: rows.reduce((sum, r) => sum + (r.quality || 0), 0) / rows.length || 0,
+        totalStakeholders: rows.reduce((sum, r) => sum + (r.stakeholders?.length || 0), 0),
+        totalConflicts: rows.reduce((sum, r) => sum + (r.conflicts?.length || 0), 0),
+        totalRequirements: rows.reduce((sum, r) => sum + (r.requirements?.length || 0), 0),
+        riskDistribution: {
+          low: rows.filter(r => r.riskLevel === 'low').length,
+          medium: rows.filter(r => r.riskLevel === 'medium').length,
+          high: rows.filter(r => r.riskLevel === 'high').length,
+          critical: rows.filter(r => r.riskLevel === 'critical').length,
+        },
+        categoryDistribution: {},
+        priorityDistribution: {
+          low: rows.filter(r => r.priority === 'low').length,
+          medium: rows.filter(r => r.priority === 'medium').length,
+          high: rows.filter(r => r.priority === 'high').length,
+          critical: rows.filter(r => r.priority === 'critical').length,
+        },
+        timelineData: [],
+        qualityTrends: [],
+        stakeholderEngagement: [],
+        conflictResolution: [],
+      };
+      
+      setAnalytics(mockAnalytics);
+    } catch (err: any) {
+      console.error('Failed to load analytics:', err);
+    }
+  }, [rows]);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  // Auto-refresh functionality
+  useEffect(() => {
+    if (autoRefresh && realTimeUpdates) {
+      const interval = setInterval(() => {
+        load();
+      }, refreshInterval * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [autoRefresh, realTimeUpdates, refreshInterval, load]);
+
+  // Real-time notifications
+  useEffect(() => {
+    if (realTimeUpdates) {
+      const eventSource = new EventSource('/api/notifications/stream');
+      eventSource.onmessage = (event) => {
+        const notificationData = JSON.parse(event.data);
+        message.info({
+          content: notificationData.message,
+          icon: notificationData.type === 'success' ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />,
+        });
+      };
+      return () => eventSource.close();
+    }
+  }, [realTimeUpdates]);
 
   /* -------------------------------- actions ------------------------- */
   const doFinalize = async (proposalId: string) => {
@@ -290,362 +427,902 @@ const FinalizePage: React.FC = () => {
     }
   };
 
-  /* --------------------------- table columns ------------------------ */
-  const columns = [
-    {
-      title: 'Proposal ID',
-      dataIndex: '_id',
-      key: '_id',
-      width: 260,
-      ellipsis: true,
-      render: (id: string) => <Text code copyable>{id}</Text>,
-    },
-    {
-      title: 'Title',
-      dataIndex: 'title',
-      key: 'title',
-      ellipsis: true,
-      render: (t: string) => <Text strong>{t}</Text>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      width: 140,
-      render: (s: Status) => <StatusTag status={s} />,
-      filters: [
-        { text: 'Pending', value: 'pending' },
-        { text: 'Processed', value: 'processed' },
-        { text: 'Negotiating', value: 'negotiating' },
-        { text: 'Finalized', value: 'finalized' },
-      ],
-      onFilter: (value: any, r: ProposalRow) => r.status === value,
-    },
-    {
-      title: 'Negotiation',
-      dataIndex: 'negotiationId',
-      key: 'negotiationId',
-      width: 260,
-      ellipsis: true,
-      render: (nid?: string) => (nid ? <Text code copyable>{nid}</Text> : <Text type="secondary">—</Text>),
-    },
-    {
-      title: 'Submitter',
-      dataIndex: 'submitter',
-      key: 'submitter',
-      width: 260,
-      ellipsis: true,
-      render: (u: ProposalRow['submitter']) =>
-        u ? (
-          <span>
-            <Text>{u.name || 'User'}</Text>
-            {u.email ? <Text type="secondary"> — {u.email}</Text> : null}
-          </span>
-        ) : (
-          <Text type="secondary">—</Text>
-        ),
-    },
-    {
-      title: 'Updated',
-      dataIndex: 'updatedAt',
-      key: 'updatedAt',
-      width: 180,
-      render: (d?: string) => (d ? dayjs(d).format('YYYY-MM-DD HH:mm') : '—'),
-      sorter: (a: ProposalRow, b: ProposalRow) =>
-        dayjs(a.updatedAt || 0).valueOf() - dayjs(b.updatedAt || 0).valueOf(),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      fixed: 'right' as const,
-      width: 320,
-      render: (_: any, record: ProposalRow) => {
-        const canDownload = !!record.negotiationId;
-        return (
-          <Space>
-            <Popconfirm
-              title="Finalize this proposal?"
-              okText="Finalize"
-              okButtonProps={{ type: 'primary' }}
-              onConfirm={() => doFinalize(record._id)}
-              disabled={record.status === 'finalized'}
-            >
-              <Button
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                loading={rowLoadingId === record._id}
-                disabled={record.status === 'finalized'}
-              >
-                Finalize
-              </Button>
-            </Popconfirm>
-
-            <Tooltip title={canDownload ? 'Preview final text' : 'No final text yet'}>
-              <Button icon={<EyeOutlined />} onClick={() => previewArtifact(record)} disabled={!canDownload}>
-                Preview
-              </Button>
-            </Tooltip>
-
-            <Tooltip title={canDownload ? 'Download .txt' : 'No final text yet'}>
-              <Button icon={<FileTextOutlined />} onClick={() => downloadArtifact(record)} disabled={!canDownload}>
-                Download
-              </Button>
-            </Tooltip>
-          </Space>
-        );
-      },
-    },
-  ];
 
   return (
-    <div>
-      {/* Header */}
-      <Row justify="space-between" align="middle" gutter={[16, 16]}>
-        <Col>
-          <Space direction="vertical" size={0}>
-            <Title level={3} style={{ margin: 0 }}>
-              Finalize Proposals
-            </Title>
-            <Text type="secondary">
-              Run single or batch finalization, preview artifacts, and export consolidated, IEEE-style SRS deliverables.
-            </Text>
-          </Space>
-        </Col>
-        <Col>
-          <Space wrap>
-            <Tooltip title="Refresh list">
-              <Button icon={<ReloadOutlined />} onClick={load} />
-            </Tooltip>
-            <Popconfirm
-              title={`Finalize ${selectedRowKeys.length} selected proposals?`}
-              okText="Finalize"
-              onConfirm={doBatchFinalize}
-              disabled={!selectedRowKeys.length}
-            >
-              <Badge count={selectedRowKeys.length || 0} size="small" offset={[6, -2]}>
-                <Button type="primary" icon={<CheckCircleOutlined />} disabled={!selectedRowKeys.length}>
-                  Finalize Selected
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      {/* Enhanced Header */}
+      <Card style={{ marginBottom: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <Row justify="space-between" align="middle" gutter={[16, 16]}>
+          <Col>
+            <Space direction="vertical" size={0}>
+              <Title level={2} style={{ margin: 0, color: '#1890ff' }}>
+                <RocketOutlined style={{ marginRight: '8px' }} />
+                Proposal Finalization Hub
+              </Title>
+              <Text type="secondary" style={{ fontSize: '16px' }}>
+                Transform multiple proposals into a single, comprehensive Software Requirements Specification
+              </Text>
+            </Space>
+          </Col>
+          <Col>
+            <Space wrap>
+              <Tooltip title="Analytics Dashboard">
+                <Button 
+                  icon={<BarChartOutlined />} 
+                  onClick={() => setAnalyticsVisible(true)}
+                  type="default"
+                >
+                  Analytics
                 </Button>
-              </Badge>
-            </Popconfirm>
+              </Tooltip>
+              <Tooltip title="Settings">
+                <Button 
+                  icon={<SettingOutlined />} 
+                  onClick={() => setSettingsVisible(true)}
+                  type="default"
+                >
+                  Settings
+                </Button>
+              </Tooltip>
+              <Tooltip title="Refresh data">
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  onClick={load}
+                  loading={loading}
+                  type="default"
+                >
+                  Refresh
+                </Button>
+              </Tooltip>
+              <Popconfirm
+                title={`Finalize ${selectedRowKeys.length} selected proposals?`}
+                okText="Finalize"
+                onConfirm={doBatchFinalize}
+                disabled={!selectedRowKeys.length}
+              >
+                <Badge count={selectedRowKeys.length || 0} size="small" offset={[6, -2]}>
+                  <Button 
+                    type="primary" 
+                    icon={<ThunderboltOutlined />} 
+                    disabled={!selectedRowKeys.length}
+                    size="large"
+                  >
+                    Finalize Selected
+                  </Button>
+                </Badge>
+              </Popconfirm>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* Analytics Overview */}
+      {analytics && (
+        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+          <Col xs={24} sm={6}>
+            <Card size="small" style={{ borderRadius: '8px', textAlign: 'center' }}>
+              <Statistic 
+                title="Total Proposals" 
+                value={analytics.totalProposals}
+                prefix={<FileTextOutlined style={{ color: '#1890ff' }} />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={6}>
+            <Card size="small" style={{ borderRadius: '8px', textAlign: 'center' }}>
+              <Statistic 
+                title="Finalized" 
+                value={analytics.finalizedProposals}
+                prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={6}>
+            <Card size="small" style={{ borderRadius: '8px', textAlign: 'center' }}>
+              <Statistic 
+                title="In Progress" 
+                value={analytics.negotiatingProposals}
+                prefix={<SyncOutlined style={{ color: '#faad14' }} />}
+                valueStyle={{ color: '#faad14' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={6}>
+            <Card size="small" style={{ borderRadius: '8px', textAlign: 'center' }}>
+              <Statistic 
+                title="Avg Quality" 
+                value={analytics.averageQuality}
+                precision={1}
+                suffix="/10"
+                prefix={<StarOutlined style={{ color: '#722ed1' }} />}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* Main Content Tabs */}
+      <Card style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'overview',
+              label: (
+                <span>
+                  <DashboardOutlined />
+                  Overview
+                </span>
+              ),
+              children: (
+                <div>
+                  {/* Enhanced Filters */}
+                  <Card size="small" style={{ marginBottom: '16px', borderRadius: '8px' }}>
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} md={8}>
+                        <Input
+                          allowClear
+                          prefix={<SearchOutlined />}
+                          placeholder="Search proposals..."
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          onPressEnter={() => {
+                            setPage(1);
+                            load();
+                          }}
+                          size="large"
+                        />
+                      </Col>
+                      <Col xs={24} md={6}>
+                        <Select<Status | 'all'>
+                          value={status}
+                          onChange={(v) => {
+                            setStatus(v);
+                            setPage(1);
+                          }}
+                          style={{ width: '100%' }}
+                          size="large"
+                          options={[
+                            { value: 'all', label: 'All Statuses' },
+                            { value: 'pending', label: 'Pending' },
+                            { value: 'processed', label: 'Processed' },
+                            { value: 'negotiating', label: 'Negotiating' },
+                            { value: 'finalized', label: 'Finalized' },
+                          ]}
+                        />
+                      </Col>
+                      <Col xs={24} md={10}>
+                        <RangePicker
+                          allowEmpty={[true, true]}
+                          value={dateRange as any}
+                          onChange={(r) => {
+                            setDateRange(r);
+                            setPage(1);
+                          }}
+                          style={{ width: '100%' }}
+                          size="large"
+                          showTime
+                          placeholder={['Since', 'Until']}
+                        />
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* Enhanced Table */}
+                  <Table<ProposalRow>
+                    rowKey="_id"
+                    loading={loading}
+                    dataSource={rows}
+                    columns={[
+                      {
+                        title: 'Proposal',
+                        key: 'proposal',
+                        width: 300,
+                        render: (_, record) => (
+                          <div>
+                            <Text strong style={{ fontSize: '14px' }}>{record.title}</Text>
+                            <br />
+                            <Text code copyable style={{ fontSize: '12px' }}>{record._id}</Text>
+                            <br />
+                            <Space size="small">
+                              <Tag color={record.priority === 'critical' ? 'red' : record.priority === 'high' ? 'orange' : record.priority === 'medium' ? 'blue' : 'green'}>
+                                {record.priority?.toUpperCase()}
+                              </Tag>
+                              <Tag color={record.riskLevel === 'critical' ? 'red' : record.riskLevel === 'high' ? 'orange' : record.riskLevel === 'medium' ? 'blue' : 'green'}>
+                                {record.riskLevel?.toUpperCase()} RISK
+                              </Tag>
+                            </Space>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: 'Status',
+                        dataIndex: 'status',
+                        key: 'status',
+                        width: 120,
+                        render: (s: Status) => <StatusTag status={s} />,
+                        filters: [
+                          { text: 'Pending', value: 'pending' },
+                          { text: 'Processed', value: 'processed' },
+                          { text: 'Negotiating', value: 'negotiating' },
+                          { text: 'Finalized', value: 'finalized' },
+                        ],
+                        onFilter: (value: any, r: ProposalRow) => r.status === value,
+                      },
+                      {
+                        title: 'Progress',
+                        key: 'progress',
+                        width: 150,
+                        render: (_, record) => (
+                          <div>
+                            <Progress 
+                              percent={record.progress || 0} 
+                              size="small" 
+                              status={record.progress === 100 ? 'success' : 'active'}
+                            />
+                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                              {record.progress || 0}% Complete
+                            </Text>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: 'Quality',
+                        key: 'quality',
+                        width: 100,
+                        render: (_, record) => (
+                          <Rate 
+                            disabled 
+                            value={record.quality || 0} 
+                            count={5}
+                            style={{ fontSize: '16px' }}
+                          />
+                        ),
+                      },
+                      {
+                        title: 'Stakeholders',
+                        key: 'stakeholders',
+                        width: 120,
+                        render: (_, record) => (
+                          <Space>
+                            <TeamOutlined />
+                            <Text>{record.stakeholders?.length || 0}</Text>
+                          </Space>
+                        ),
+                      },
+                      {
+                        title: 'Conflicts',
+                        key: 'conflicts',
+                        width: 100,
+                        render: (_, record) => (
+                          <Space>
+                            <ExclamationCircleOutlined />
+                            <Text>{record.conflicts?.length || 0}</Text>
+                          </Space>
+                        ),
+                      },
+                      {
+                        title: 'Updated',
+                        dataIndex: 'updatedAt',
+                        key: 'updatedAt',
+                        width: 150,
+                        render: (d?: string) => (d ? dayjs(d).format('MMM DD, YYYY') : '—'),
+                        sorter: (a: ProposalRow, b: ProposalRow) =>
+                          dayjs(a.updatedAt || 0).valueOf() - dayjs(b.updatedAt || 0).valueOf(),
+                      },
+                      {
+                        title: 'Actions',
+                        key: 'actions',
+                        fixed: 'right' as const,
+                        width: 200,
+                        render: (_: any, record: ProposalRow) => {
+                          const canDownload = !!record.negotiationId;
+                          return (
+                            <Space>
+                              <Popconfirm
+                                title="Finalize this proposal?"
+                                okText="Finalize"
+                                okButtonProps={{ type: 'primary' }}
+                                onConfirm={() => doFinalize(record._id)}
+                                disabled={record.status === 'finalized'}
+                              >
+                                <Button
+                                  type="primary"
+                                  icon={<CheckCircleOutlined />}
+                                  loading={rowLoadingId === record._id}
+                                  disabled={record.status === 'finalized'}
+                                  size="small"
+                                >
+                                  Finalize
+                                </Button>
+                              </Popconfirm>
+
+                              <Tooltip title="View Details">
+                                <Button 
+                                  icon={<EyeOutlined />} 
+                                  onClick={() => {
+                                    setSelectedProposal(record);
+                                    setProposalDetailsVisible(true);
+                                  }}
+                                  size="small"
+                                />
+                              </Tooltip>
+
+                              <Tooltip title={canDownload ? 'Preview final text' : 'No final text yet'}>
+                                <Button 
+                                  icon={<FileTextOutlined />} 
+                                  onClick={() => previewArtifact(record)} 
+                                  disabled={!canDownload}
+                                  size="small"
+                                />
+                              </Tooltip>
+                            </Space>
+                          );
+                        },
+                      },
+                    ]}
+                    sticky
+                    pagination={{
+                      current: page,
+                      pageSize,
+                      total,
+                      showSizeChanger: true,
+                      showQuickJumper: true,
+                      showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} proposals`,
+                      onChange: (p, ps) => {
+                        setPage(p);
+                        setPageSize(ps);
+                      },
+                    }}
+                    locale={{
+                      emptyText: (
+                        <Empty 
+                          description="No proposals found" 
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        />
+                      ),
+                    }}
+                    rowSelection={{
+                      selectedRowKeys,
+                      onChange: setSelectedRowKeys,
+                      getCheckboxProps: (record) => ({
+                        disabled: record.status === 'finalized',
+                      }),
+                    }}
+                    scroll={{ x: 1200 }}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'analytics',
+              label: (
+                <span>
+                  <BarChartOutlined />
+                  Analytics
+                </span>
+              ),
+              children: (
+                <div>
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} lg={12}>
+                      <Card title="Status Distribution" style={{ borderRadius: '8px' }}>
+                        <Pie
+                          data={[
+                            { type: 'Finalized', value: analytics?.finalizedProposals || 0 },
+                            { type: 'Negotiating', value: analytics?.negotiatingProposals || 0 },
+                            { type: 'Pending', value: analytics?.pendingProposals || 0 },
+                          ]}
+                          angleField="value"
+                          colorField="type"
+                          radius={0.8}
+                          label={{
+                            type: 'outer',
+                            content: '{name} {percentage}',
+                          }}
+                          interactions={[{ type: 'element-active' }]}
+                        />
+                      </Card>
+                    </Col>
+                    <Col xs={24} lg={12}>
+                      <Card title="Risk Distribution" style={{ borderRadius: '8px' }}>
+                        <Column
+                          data={Object.entries(analytics?.riskDistribution || {}).map(([key, value]) => ({
+                            risk: key.toUpperCase(),
+                            count: value,
+                          }))}
+                          xField="risk"
+                          yField="count"
+                          color={['#52c41a', '#faad14', '#ff4d4f', '#722ed1']}
+                          label={{
+                            position: 'middle',
+                            style: {
+                              fill: '#FFFFFF',
+                              opacity: 0.6,
+                            },
+                          }}
+                        />
+                      </Card>
+                    </Col>
+                  </Row>
+                </div>
+              ),
+            },
+            {
+              key: 'consolidation',
+              label: (
+                <span>
+                  <CloudDownloadOutlined />
+                  Consolidation
+                </span>
+              ),
+              children: (
+                <div>
+                  {/* Consolidated options */}
+                  <Card title="Export Configuration" style={{ marginBottom: '16px', borderRadius: '8px' }}>
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} md={8}>
+                        <Input
+                          allowClear
+                          placeholder="Filter by topic key (optional)"
+                          value={conTopicKey}
+                          onChange={(e) => setConTopicKey(e.target.value)}
+                          size="large"
+                        />
+                      </Col>
+                      <Col xs={24} md={10}>
+                        <RangePicker
+                          allowEmpty={[true, true]}
+                          value={conRange as any}
+                          onChange={(r) => setConRange(r)}
+                          style={{ width: '100%' }}
+                          size="large"
+                          showTime
+                          placeholder={['Since', 'Until']}
+                        />
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  <Row gutter={[12, 12]} align="middle" style={{ marginBottom: '16px' }}>
+                    <Col xs={24} md={8}>
+                      <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                        <Text type="secondary">Format</Text>
+                        <Segmented
+                          block
+                          value={conFormat}
+                          onChange={(v) => setConFormat(v as 'srs' | 'plain')}
+                          options={[
+                            { label: 'IEEE SRS', value: 'srs' },
+                            { label: 'Plain List', value: 'plain' },
+                          ]}
+                        />
+                      </Space>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                        <Text type="secondary">Output</Text>
+                        <Segmented
+                          block
+                          value={conOutput}
+                          onChange={(v) => setConOutput(v as 'md' | 'docx' | 'pdf')}
+                          options={[
+                            { label: (<><FileMarkdownOutlined /> MD</>), value: 'md' },
+                            { label: (<><FileWordOutlined /> DOCX</>), value: 'docx' },
+                            { label: (<><FilePdfOutlined /> PDF</>), value: 'pdf' },
+                          ]}
+                        />
+                      </Space>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                        <Text type="secondary">
+                          Polish <Tooltip title="Optional LLM polish for human-like tone. IDs & traceability are preserved."><ExperimentOutlined /></Tooltip>
+                        </Text>
+                        <Segmented
+                          block
+                          value={conPolish}
+                          onChange={(v) => setConPolish(v as 'none' | 'md' | 'gemini')}
+                          options={[
+                            { label: 'None', value: 'none' },
+                            { label: 'SRS text', value: 'md' },
+                            { label: 'Gemini Polish', value: 'gemini' },
+                          ]}
+                        />
+                      </Space>
+                    </Col>
+                  </Row>
+
+                  <Row justify="end" style={{ marginBottom: '16px' }}>
+                    <Space wrap>
+                      <Tooltip title="Preview SRS (Markdown)">
+                        <Button onClick={doPreviewConsolidated} loading={conLoading} icon={<EyeOutlined />} size="large">
+                          Preview Consolidated
+                        </Button>
+                      </Tooltip>
+                      <Tooltip title="Export with the chosen options">
+                        <Button
+                          type="primary"
+                          icon={<CloudDownloadOutlined />}
+                          onClick={doDownloadConsolidated}
+                          loading={conLoading}
+                          size="large"
+                        >
+                          Export SRS
+                        </Button>
+                      </Tooltip>
+                    </Space>
+                  </Row>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Card>
+
+      {/* Proposal Details Modal */}
+      <Modal
+        title={
+          <Space>
+            <EyeOutlined />
+            <span>Proposal Details</span>
           </Space>
-        </Col>
-      </Row>
+        }
+        open={proposalDetailsVisible}
+        onCancel={() => setProposalDetailsVisible(false)}
+        footer={null}
+        width={800}
+      >
+        {selectedProposal && (
+          <div>
+            <Descriptions bordered column={2}>
+              <Descriptions.Item label="Title" span={2}>
+                <Text strong>{selectedProposal.title}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="ID">
+                <Text code copyable>{selectedProposal._id}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Status">
+                <StatusTag status={selectedProposal.status} />
+              </Descriptions.Item>
+              <Descriptions.Item label="Priority">
+                <Tag color={selectedProposal.priority === 'critical' ? 'red' : selectedProposal.priority === 'high' ? 'orange' : selectedProposal.priority === 'medium' ? 'blue' : 'green'}>
+                  {selectedProposal.priority?.toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Risk Level">
+                <Tag color={selectedProposal.riskLevel === 'critical' ? 'red' : selectedProposal.riskLevel === 'high' ? 'orange' : selectedProposal.riskLevel === 'medium' ? 'blue' : 'green'}>
+                  {selectedProposal.riskLevel?.toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Progress">
+                <Progress percent={selectedProposal.progress || 0} />
+              </Descriptions.Item>
+              <Descriptions.Item label="Quality">
+                <Rate disabled value={selectedProposal.quality || 0} count={5} />
+              </Descriptions.Item>
+              <Descriptions.Item label="Stakeholders">
+                <Text>{selectedProposal.stakeholders?.length || 0}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Conflicts">
+                <Text>{selectedProposal.conflicts?.length || 0}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Requirements">
+                <Text>{selectedProposal.requirements?.length || 0}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Created">
+                {selectedProposal.createdAt ? dayjs(selectedProposal.createdAt).format('YYYY-MM-DD HH:mm') : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Updated">
+                {selectedProposal.updatedAt ? dayjs(selectedProposal.updatedAt).format('YYYY-MM-DD HH:mm') : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+            
+            <Divider />
+            
+            <Space>
+              <Button 
+                type="primary" 
+                icon={<CheckCircleOutlined />}
+                onClick={() => {
+                  doFinalize(selectedProposal._id);
+                  setProposalDetailsVisible(false);
+                }}
+                disabled={selectedProposal.status === 'finalized'}
+              >
+                Finalize Proposal
+              </Button>
+              <Button 
+                icon={<EyeOutlined />}
+                onClick={() => {
+                  previewArtifact(selectedProposal);
+                  setProposalDetailsVisible(false);
+                }}
+                disabled={!selectedProposal.negotiationId}
+              >
+                Preview Artifact
+              </Button>
+            </Space>
+          </div>
+        )}
+      </Modal>
 
-      <Divider />
-
-      {/* Filters */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-        <Col xs={24} md={8}>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="Search title, id, submitter…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onPressEnter={() => {
-              setPage(1);
-              load();
-            }}
-          />
-        </Col>
-        <Col xs={24} md={6}>
-          <Select<Status | 'all'>
-            value={status}
-            onChange={(v) => {
-              setStatus(v);
-              setPage(1);
-            }}
-            style={{ width: '100%' }}
-            options={[
-              { value: 'all', label: 'All statuses' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'processed', label: 'Processed' },
-              { value: 'negotiating', label: 'Negotiating' },
-              { value: 'finalized', label: 'Finalized' },
-            ]}
-          />
-        </Col>
-        <Col xs={24} md={10}>
-          <RangePicker
-            allowEmpty={[true, true]}
-            value={dateRange as any}
-            onChange={(r) => {
-              setDateRange(r);
-              setPage(1);
-            }}
-            style={{ width: '100%' }}
-            showTime
-            placeholder={['Since', 'Until']}
-          />
-        </Col>
-      </Row>
-
-      {/* Consolidated options */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-        <Col xs={24} md={8}>
-          <Input
-            allowClear
-            placeholder="Consolidated filter — topicKey (optional)"
-            value={conTopicKey}
-            onChange={(e) => setConTopicKey(e.target.value)}
-          />
-        </Col>
-        <Col xs={24} md={10}>
-          <RangePicker
-            allowEmpty={[true, true]}
-            value={conRange as any}
-            onChange={(r) => setConRange(r)}
-            style={{ width: '100%' }}
-            showTime
-            placeholder={['Consolidated since', 'Consolidated until']}
-          />
-        </Col>
-      </Row>
-
-      <Row gutter={[12, 12]} align="middle" style={{ marginBottom: 16 }}>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">Format</Text>
-            <Segmented
-              block
-              value={conFormat}
-              onChange={(v) => setConFormat(v as 'srs' | 'plain')}
-              options={[
-                { label: 'IEEE SRS', value: 'srs' },
-                { label: 'Plain List', value: 'plain' },
-              ]}
+      {/* Settings Modal */}
+      <Modal
+        title={
+          <Space>
+            <SettingOutlined />
+            <span>Settings</span>
+          </Space>
+        }
+        open={settingsVisible}
+        onCancel={() => setSettingsVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <Form layout="vertical">
+          <Form.Item label="Real-time Updates">
+            <Switch 
+              checked={realTimeUpdates} 
+              onChange={setRealTimeUpdates}
+              checkedChildren="On" 
+              unCheckedChildren="Off"
             />
-          </Space>
-        </Col>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">Output</Text>
-            <Segmented
-              block
-              value={conOutput}
-              onChange={(v) => setConOutput(v as 'md' | 'docx' | 'pdf')}
-              options={[
-                { label: (<><FileMarkdownOutlined /> MD</>), value: 'md' },
-                { label: (<><FileWordOutlined /> DOCX</>), value: 'docx' },
-                { label: (<><FilePdfOutlined /> PDF</>), value: 'pdf' },
-              ]}
+          </Form.Item>
+          
+          <Form.Item label="Auto Refresh">
+            <Switch 
+              checked={autoRefresh} 
+              onChange={setAutoRefresh}
+              checkedChildren="On" 
+              unCheckedChildren="Off"
             />
-          </Space>
-        </Col>
-        <Col xs={24} md={8}>
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
-            <Text type="secondary">
-              Polish <Tooltip title="Optional LLM polish for human-like tone. IDs & traceability are preserved."><ExperimentOutlined /></Tooltip>
-            </Text>
-            <Segmented
-              block
-              value={conPolish}
-              onChange={(v) => setConPolish(v as 'none' | 'md' | 'gemini')}
-              options={[
-                { label: 'None', value: 'none' },
-                { label: 'SRS text', value: 'md' },
-                { label: 'Gemini Polish', value: 'gemini' },
-              ]}
+          </Form.Item>
+          
+          <Form.Item label={`Refresh Interval: ${refreshInterval} seconds`}>
+            <Slider
+              min={10}
+              max={300}
+              value={refreshInterval}
+              onChange={setRefreshInterval}
+              marks={{
+                10: '10s',
+                30: '30s',
+                60: '1m',
+                120: '2m',
+                300: '5m',
+              }}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Analytics Modal */}
+      <Modal
+        title={
+          <Space>
+            <BarChartOutlined />
+            <span>Analytics Dashboard</span>
           </Space>
-        </Col>
-      </Row>
-
-      <Row justify="end" style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Tooltip title="Preview SRS (Markdown)">
-            <Button onClick={doPreviewConsolidated} loading={conLoading} icon={<EyeOutlined />}>
-              Preview Consolidated
-            </Button>
-          </Tooltip>
-          <Tooltip title="Export with the chosen options">
-            <Button
-              type="primary"
-              icon={<CloudDownloadOutlined />}
-              onClick={doDownloadConsolidated}
-              loading={conLoading}
-            >
-              Export SRS
-            </Button>
-          </Tooltip>
-        </Space>
-      </Row>
-
-      {/* Table */}
-      <Table<ProposalRow>
-        rowKey="_id"
-        loading={loading}
-        dataSource={rows}
-        columns={columns as any}
-        sticky
-        pagination={{
-          current: page,
-          pageSize,
-          total,
-          showSizeChanger: true,
-          onChange: (p, ps) => {
-            setPage(p);
-            setPageSize(ps);
-          },
-        }}
-        locale={{
-          emptyText: (
-            <Empty description="No proposals found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          ),
-        }}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-          getCheckboxProps: (record) => ({
-            disabled: record.status === 'finalized',
-          }),
-        }}
-        scroll={{ x: 1200 }}
-      />
+        }
+        open={analyticsVisible}
+        onCancel={() => setAnalyticsVisible(false)}
+        footer={null}
+        width={1000}
+      >
+        {analytics && (
+          <div>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} lg={12}>
+                <Card title="Status Distribution" style={{ borderRadius: '8px' }}>
+                  <Pie
+                    data={[
+                      { type: 'Finalized', value: analytics.finalizedProposals },
+                      { type: 'Negotiating', value: analytics.negotiatingProposals },
+                      { type: 'Pending', value: analytics.pendingProposals },
+                    ]}
+                    angleField="value"
+                    colorField="type"
+                    radius={0.8}
+                    label={{
+                      type: 'outer',
+                      content: '{name} {percentage}',
+                    }}
+                    interactions={[{ type: 'element-active' }]}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} lg={12}>
+                <Card title="Risk Distribution" style={{ borderRadius: '8px' }}>
+                  <Column
+                    data={Object.entries(analytics.riskDistribution).map(([key, value]) => ({
+                      risk: key.toUpperCase(),
+                      count: value,
+                    }))}
+                    xField="risk"
+                    yField="count"
+                    color={['#52c41a', '#faad14', '#ff4d4f', '#722ed1']}
+                    label={{
+                      position: 'middle',
+                      style: {
+                        fill: '#FFFFFF',
+                        opacity: 0.6,
+                      },
+                    }}
+                  />
+                </Card>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]} style={{ marginTop: '16px' }}>
+              <Col xs={24} lg={12}>
+                <Card title="Priority Distribution" style={{ borderRadius: '8px' }}>
+                  <Column
+                    data={Object.entries(analytics.priorityDistribution).map(([key, value]) => ({
+                      priority: key.toUpperCase(),
+                      count: value,
+                    }))}
+                    xField="priority"
+                    yField="count"
+                    color={['#52c41a', '#1890ff', '#faad14', '#ff4d4f']}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} lg={12}>
+                <Card title="Quality Overview" style={{ borderRadius: '8px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Statistic 
+                      title="Average Quality" 
+                      value={analytics.averageQuality}
+                      precision={1}
+                      suffix="/10"
+                      valueStyle={{ color: '#722ed1', fontSize: '32px' }}
+                    />
+                    <Rate 
+                      disabled 
+                      value={analytics.averageQuality / 2} 
+                      count={5}
+                      style={{ fontSize: '24px', marginTop: '16px' }}
+                    />
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+          </div>
+        )}
+      </Modal>
 
       {/* Final artifact preview */}
       <Drawer
-        title={previewTitle}
+        title={
+          <Space>
+            <FileTextOutlined />
+            <span>{previewTitle}</span>
+          </Space>
+        }
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         width={720}
+        extra={
+          <Space>
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={() => {
+                if (selectedProposal?.negotiationId) {
+                  downloadArtifact(selectedProposal);
+                }
+              }}
+            >
+              Download
+            </Button>
+          </Space>
+        }
       >
         {previewLoading ? (
-          <Text type="secondary">Loading…</Text>
+          <div style={{ textAlign: 'center', padding: '50px' }}>
+            <Spin size="large" />
+            <div style={{ marginTop: '16px' }}>
+              <Text type="secondary">Loading artifact...</Text>
+            </div>
+          </div>
         ) : (
           <>
-            <Paragraph>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{previewText}</pre>
-            </Paragraph>
+            <Alert
+              message="Final Artifact"
+              description="This is the consolidated final artifact generated from the proposal finalization process."
+              type="info"
+              showIcon
+              style={{ marginBottom: '16px' }}
+            />
+            <Card style={{ borderRadius: '8px' }}>
+              <pre style={{ 
+                whiteSpace: 'pre-wrap', 
+                margin: 0, 
+                fontSize: '14px',
+                lineHeight: '1.6',
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+              }}>
+                {previewText}
+              </pre>
+            </Card>
             <Divider />
-            <Text type="secondary">Plain-text export generated by the Finalization service.</Text>
+            <Text type="secondary">
+              <InfoCircleOutlined style={{ marginRight: '8px' }} />
+              Plain-text export generated by the Finalization service. Use the download button to save this artifact.
+            </Text>
           </>
         )}
       </Drawer>
 
       {/* Consolidated preview */}
       <Drawer
-        title="Consolidated SRS (Markdown Preview)"
+        title={
+          <Space>
+            <CloudDownloadOutlined />
+            <span>Consolidated SRS (Markdown Preview)</span>
+          </Space>
+        }
         open={conPreviewOpen}
         onClose={() => setConPreviewOpen(false)}
         width={920}
+        extra={
+          <Space>
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={doDownloadConsolidated}
+              type="primary"
+            >
+              Export with Current Options
+            </Button>
+          </Space>
+        }
       >
         {conLoading ? (
-          <Text type="secondary">Loading…</Text>
+          <div style={{ textAlign: 'center', padding: '50px' }}>
+            <Spin size="large" />
+            <div style={{ marginTop: '16px' }}>
+              <Text type="secondary">Generating consolidated SRS...</Text>
+            </div>
+          </div>
         ) : (
           <>
-            <Paragraph>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{conPreviewText}</pre>
-            </Paragraph>
+            <Alert
+              message="Consolidated Software Requirements Specification"
+              description="This preview shows the consolidated SRS in Markdown format. Use the export button to generate DOCX or PDF versions."
+              type="success"
+              showIcon
+              style={{ marginBottom: '16px' }}
+            />
+            <Card style={{ borderRadius: '8px' }}>
+              <pre style={{ 
+                whiteSpace: 'pre-wrap', 
+                margin: 0, 
+                fontSize: '14px',
+                lineHeight: '1.6',
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+              }}>
+                {conPreviewText}
+              </pre>
+            </Card>
             <Divider />
-            <Space>
-              <Button icon={<DownloadOutlined />} onClick={doDownloadConsolidated}>
-                Export with Current Options
-              </Button>
-              <Text type="secondary">
-                Tip: Switch output to DOCX/PDF for a polished handout. Use “Polish” to improve readability (IDs stay intact).
-              </Text>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Alert
+                message="Export Tips"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                    <li>Switch output to DOCX/PDF for a polished handout</li>
+                    <li>Use "Polish" to improve readability (IDs stay intact)</li>
+                    <li>IEEE SRS format follows industry standards</li>
+                    <li>All requirements are traceable to original proposals</li>
+                  </ul>
+                }
+                type="info"
+                showIcon
+              />
             </Space>
           </>
         )}

@@ -33,7 +33,6 @@ import {
     getAllUsers,
     runBenchmarking,
     getAllBenchmarkResults,
-    getBenchmarkResults,
     getMethodComparison,
     getBenchmarkMetricsSummary,
     exportBenchmarkCSV
@@ -166,9 +165,14 @@ const BenchmarkingPage: React.FC = () => {
 
     const handleViewDetails = async (resultId: string) => {
         try {
-            const result = await getBenchmarkResults(resultId);
-            setSelectedResult(result);
-            setModalVisible(true);
+            // Find the result in our existing data instead of making an API call
+            const result = benchmarkResults.find(r => r._id === resultId);
+            if (result) {
+                setSelectedResult(result);
+                setModalVisible(true);
+            } else {
+                message.error('Benchmark result not found');
+            }
         } catch (err: any) {
             console.error("Failed to fetch benchmark details:", err);
             message.error(err.message || 'Failed to fetch benchmark details');
@@ -193,6 +197,17 @@ const BenchmarkingPage: React.FC = () => {
             key: 'id',
             render: (id: string) => id.slice(-8),
             width: 100
+        },
+        {
+            title: 'Negotiation Status',
+            dataIndex: ['negotiationId', 'status'],
+            key: 'negotiationStatus',
+            render: (status: string) => (
+                <Tag color={status === 'finalized' ? 'green' : status === 'active' ? 'blue' : 'orange'}>
+                    {status}
+                </Tag>
+            ),
+            width: 120
         },
         {
             title: 'Main Method',
@@ -242,10 +257,44 @@ const BenchmarkingPage: React.FC = () => {
             width: 100
         },
         {
+            title: 'Conflicts',
+            dataIndex: ['mainContribution', 'conflictsCount'],
+            key: 'conflicts',
+            render: (count: number, record: BenchmarkResult) => {
+                const resolved = record.mainContribution.conflictsResolved;
+                return `${resolved}/${count}`;
+            },
+            width: 80
+        },
+        {
+            title: 'Fairness',
+            dataIndex: ['mainContribution', 'fairnessJain'],
+            key: 'fairness',
+            render: (fairness: number) => Math.round(fairness * 1000) / 1000,
+            width: 80
+        },
+        {
+            title: 'Stakeholders',
+            dataIndex: 'stakeholderCount',
+            key: 'stakeholderCount',
+            width: 100
+        },
+        {
             title: 'Benchmarks',
             dataIndex: 'benchmarks',
             key: 'benchmarkCount',
             render: (benchmarks: any[]) => benchmarks.length,
+            width: 100
+        },
+        {
+            title: 'Blockchain',
+            dataIndex: 'blockchainAnchored',
+            key: 'blockchain',
+            render: (anchored: boolean) => (
+                <Tag color={anchored ? 'green' : 'default'}>
+                    {anchored ? 'Anchored' : 'Not Anchored'}
+                </Tag>
+            ),
             width: 100
         },
         {
@@ -261,9 +310,9 @@ const BenchmarkingPage: React.FC = () => {
         },
         {
             title: 'Created',
-            dataIndex: 'createdAt',
+            dataIndex: ['mainContribution', 'timestamp'],
             key: 'createdAt',
-            render: (date: string) => new Date(date).toLocaleDateString(),
+            render: (date: string) => date ? new Date(date).toLocaleDateString() : 'N/A',
             width: 120
         },
         {
@@ -366,7 +415,7 @@ const BenchmarkingPage: React.FC = () => {
                         <Card>
                             <Statistic 
                                 title="Success Rate" 
-                                value={`${Math.round((metricsSummary.successRate || 0) * 100)}%`} 
+                                value={`${Math.round(metricsSummary.successRate || 0)}%`} 
                                 prefix={<CheckCircleOutlined />}
                             />
                         </Card>
@@ -396,7 +445,7 @@ const BenchmarkingPage: React.FC = () => {
                         showQuickJumper: true,
                         showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} results`
                     }}
-                    scroll={{ x: 1200 }}
+                    scroll={{ x: 1400 }}
                     locale={{
                         emptyText: (
                             <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -489,12 +538,12 @@ const BenchmarkingPage: React.FC = () => {
                 open={modalVisible}
                 onCancel={() => setModalVisible(false)}
                 footer={null}
-                width={1000}
+                width={1200}
             >
                 {selectedResult && (
                     <div>
                         <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Card size="small">
                                     <Statistic 
                                         title="Main Method" 
@@ -502,7 +551,7 @@ const BenchmarkingPage: React.FC = () => {
                                     />
                                 </Card>
                             </Col>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Card size="small">
                                     <Statistic 
                                         title="TTC (seconds)" 
@@ -511,7 +560,7 @@ const BenchmarkingPage: React.FC = () => {
                                     />
                                 </Card>
                             </Col>
-                            <Col span={8}>
+                            <Col span={6}>
                                 <Card size="small">
                                     <Statistic 
                                         title="Success Rate" 
@@ -519,20 +568,153 @@ const BenchmarkingPage: React.FC = () => {
                                     />
                                 </Card>
                             </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Utility" 
+                                        value={selectedResult.mainContribution.decision.utility} 
+                                        precision={2}
+                                    />
+                                </Card>
+                            </Col>
                         </Row>
+
+                        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Rounds" 
+                                        value={selectedResult.mainContribution.rounds} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Satisfaction" 
+                                        value={`${Math.round(selectedResult.mainContribution.ssMean * 10) / 10}/10`} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Utility Gain" 
+                                        value={Math.round(selectedResult.mainContribution.utilityGain * 1000) / 1000} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Consensus" 
+                                        value={selectedResult.mainContribution.decision.consensus ? 'Yes' : 'No'} 
+                                    />
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Conflicts Resolved" 
+                                        value={`${selectedResult.mainContribution.conflictsResolved}/${selectedResult.mainContribution.conflictsCount}`} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Fairness (Jain)" 
+                                        value={Math.round(selectedResult.mainContribution.fairnessJain * 1000) / 1000} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Participation Gini" 
+                                        value={Math.round(selectedResult.mainContribution.participationGini * 1000) / 1000} 
+                                    />
+                                </Card>
+                            </Col>
+                            <Col span={6}>
+                                <Card size="small">
+                                    <Statistic 
+                                        title="Stakeholders" 
+                                        value={selectedResult.stakeholderCount} 
+                                    />
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        <Card title="Final Agreement" size="small" style={{ marginBottom: '16px' }}>
+                            <Paragraph>{selectedResult.mainContribution.decision.finalAgreement}</Paragraph>
+                        </Card>
+
+                        <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+                            <Col span={12}>
+                                <Card title="Stakeholder Roles" size="small">
+                                    <div>
+                                        {selectedResult.stakeholderRoles.map((role, index) => (
+                                            <Tag key={index} color="blue" style={{ marginBottom: '4px' }}>
+                                                {role}
+                                            </Tag>
+                                        ))}
+                                    </div>
+                                </Card>
+                            </Col>
+                            <Col span={12}>
+                                <Card title="Blockchain Information" size="small">
+                                    <div>
+                                        <p><strong>Anchored:</strong> {selectedResult.blockchainAnchored ? 'Yes' : 'No'}</p>
+                                        {selectedResult.blockchainTxHash && (
+                                            <p><strong>Transaction Hash:</strong> {selectedResult.blockchainTxHash}</p>
+                                        )}
+                                        {selectedResult.blockchainBlockNumber && (
+                                            <p><strong>Block Number:</strong> {selectedResult.blockchainBlockNumber}</p>
+                                        )}
+                                    </div>
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        <Card title="Stakeholder Preferences" size="small" style={{ marginBottom: '16px' }}>
+                            <Table
+                                dataSource={selectedResult.mainContribution.preferences.map((pref, index) => ({ ...pref, key: index }))}
+                                columns={[
+                                    { title: 'Stakeholder ID', dataIndex: 'stakeholder', key: 'stakeholder', render: (id: string) => id.slice(-8) },
+                                    { title: 'Role', dataIndex: 'role', key: 'role', render: (role: string) => <Tag color="blue">{role}</Tag> },
+                                    { title: 'Cost Priority', dataIndex: ['priorities', 'cost'], key: 'cost', render: (cost: number) => Math.round(cost * 1000) / 1000 },
+                                    { title: 'Timeline Priority', dataIndex: ['priorities', 'timeline'], key: 'timeline', render: (timeline: number) => Math.round(timeline * 1000) / 1000 },
+                                    { title: 'Quality Priority', dataIndex: ['priorities', 'quality'], key: 'quality', render: (quality: number) => Math.round(quality * 1000) / 1000 }
+                                ]}
+                                pagination={false}
+                                size="small"
+                                scroll={{ x: 600 }}
+                            />
+                        </Card>
 
                         <Card title="Benchmark Comparison" size="small">
                             <Table
                                 dataSource={selectedResult.benchmarks.map((b, index) => ({ ...b, key: index }))}
                                 columns={[
-                                    { title: 'Method', dataIndex: 'method', key: 'method' },
-                                    { title: 'Elicitation', dataIndex: 'elicitationMethod', key: 'elicitation' },
-                                    { title: 'Decision', dataIndex: 'decisionMethod', key: 'decision' },
-                                    { title: 'TTC (s)', dataIndex: 'ttcSeconds', key: 'ttc', render: (ttc: number) => Math.round(ttc * 100) / 100 },
-                                    { title: 'Success', dataIndex: 'resolutionSuccess', key: 'success', render: (success: boolean) => success ? 'Yes' : 'No' }
+                                    { title: 'Method', dataIndex: 'method', key: 'method', width: 150 },
+                                    { title: 'Elicitation', dataIndex: 'elicitationMethod', key: 'elicitation', width: 100 },
+                                    { title: 'Decision', dataIndex: 'decisionMethod', key: 'decision', width: 120 },
+                                    { title: 'TTC (s)', dataIndex: 'ttcSeconds', key: 'ttc', render: (ttc: number) => Math.round(ttc * 100) / 100, width: 80 },
+                                    { title: 'Rounds', dataIndex: 'rounds', key: 'rounds', width: 70 },
+                                    { title: 'Success', dataIndex: 'resolutionSuccess', key: 'success', render: (success: boolean) => success ? 'Yes' : 'No', width: 70 },
+                                    { title: 'Satisfaction', dataIndex: 'ssMean', key: 'satisfaction', render: (satisfaction: number) => `${Math.round(satisfaction * 10) / 10}/10`, width: 90 },
+                                    { title: 'Utility', dataIndex: ['decision', 'utility'], key: 'utility', render: (utility: number) => Math.round(utility * 100) / 100, width: 80 },
+                                    { title: 'Utility Gain', dataIndex: 'utilityGain', key: 'utilityGain', render: (gain: number) => Math.round(gain * 1000) / 1000, width: 90 },
+                                    { title: 'Conflicts', dataIndex: 'conflictsCount', key: 'conflicts', render: (count: number, record: any) => `${record.conflictsResolved}/${count}`, width: 80 },
+                                    { title: 'Fairness', dataIndex: 'fairnessJain', key: 'fairness', render: (fairness: number) => Math.round(fairness * 1000) / 1000, width: 80 }
                                 ]}
                                 pagination={false}
                                 size="small"
+                                scroll={{ x: 1000 }}
                             />
                         </Card>
                     </div>
