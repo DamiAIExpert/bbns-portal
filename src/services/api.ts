@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // Create a centralized Axios instance for all API calls.
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // Use local development server
+  baseURL: 'https://blockchain-negotiation-api-9wsj.onrender.com/api', // Production server
+  //baseURL: 'http://localhost:5000/api', // Use this for local development
   //baseURL: '/api', // Use Vercel proxy for production
   headers: {
     'Content-Type': 'application/json',
