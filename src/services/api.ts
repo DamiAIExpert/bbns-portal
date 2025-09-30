@@ -2,8 +2,8 @@ import axios from 'axios';
 
 // Create a centralized Axios instance for all API calls.
 const api = axios.create({
-  baseURL: '/api', // Use Vercel proxy for production
-  //baseURL: 'http://localhost:5000/api', // Use this for local development
+  baseURL: 'http://localhost:5000/api', // Use local development server
+  //baseURL: '/api', // Use Vercel proxy for production
   headers: {
     'Content-Type': 'application/json',
   },
