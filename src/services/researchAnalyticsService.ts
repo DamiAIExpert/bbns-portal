@@ -372,7 +372,13 @@ export const fetchMethodComparisonAnalysis = async (): Promise<MethodComparisonA
             utilityGain: 0.21,
             consensusLevel: 0.85
           }
-        ]
+        ],
+        statisticalSignificance: {
+          ttcSignificance: 0.95,
+          satisfactionSignificance: 0.88,
+          fairnessSignificance: 0.92,
+          overallSignificance: "High"
+        }
       },
       insights: [
         "Our blockchain method achieves 45% faster consensus than traditional voting",
@@ -380,12 +386,11 @@ export const fetchMethodComparisonAnalysis = async (): Promise<MethodComparisonA
         "Improved fairness index demonstrates more equitable outcomes",
         "Blockchain transparency increases trust and participation"
       ],
-      recommendations: [
-        "Implement blockchain-based negotiations for complex multi-stakeholder scenarios",
-        "Use traditional methods for simple, low-stakes decisions",
-        "Combine blockchain transparency with consensus building techniques",
-        "Regular training on blockchain negotiation protocols"
-      ]
+      statisticalAnalysis: {
+        ttest: "p < 0.001 (highly significant)",
+        effectSize: "Cohen's d = 0.85 (large effect)",
+        confidenceInterval: "95% CI [0.12, 0.36]"
+      }
     };
     
     return mockData;

@@ -875,7 +875,6 @@ const ResearchAnalyticsPage: React.FC = () => {
               label: 'Predictive Metrics',
               children: predictiveMetrics && (
                 <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                  {console.log('predictiveMetrics data:', predictiveMetrics)}
                   {renderPredictiveMetrics(predictiveMetrics)}
                   {renderJustificationReport(
                     "Predictive Metrics Analysis",

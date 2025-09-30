@@ -317,3 +317,4 @@ const NLPAnalysis: React.FC<NLPAnalysisProps> = ({ analysis, loading, error }) =
 };
 
 export default NLPAnalysis;
+

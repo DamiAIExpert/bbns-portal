@@ -225,24 +225,60 @@ export const getFinalProposalMetrics = async (): Promise<FinalProposalMetrics | 
   try {
     // Mock final proposal metrics since public endpoint doesn't exist
     const finalProposalMetrics: FinalProposalMetrics = {
-      totalFinalProposals: 18,
-      successRate: 0.85,
-      averageProcessingTime: 2.3,
-      stakeholderSatisfaction: 0.88,
-      blockchainAnchored: 15,
-      consensusLevel: 0.92,
-      conflictResolution: 0.89,
-      fairnessIndex: 0.91,
-      nashProduct: 0.79,
-      utilityGain: 0.24,
-      timeToConsensus: 1.8,
-      participantEngagement: 0.87,
-      proposalQuality: 0.89,
-      systemEfficiency: 0.86,
-      transparencyLevel: 0.94,
-      auditTrail: 0.96,
-      verificationStatus: 0.98,
-      immutableRecords: 0.97
+      finalProposalId: "fp_001",
+      topicKey: "system_requirements",
+      createdAt: "2024-01-15T10:30:00Z",
+      participants: 12,
+      sourceProposals: 8,
+      stakeholderConsensus: {
+        totalStakeholders: 12,
+        consensusMetrics: {
+          participationRate: 0.95,
+          agreementLevel: 0.88,
+          conflictResolution: 0.92
+        }
+      },
+      negotiationMetrics: {
+        totalNegotiations: 15,
+        totalRounds: 45,
+        totalConflictsResolved: 8,
+        consensusLevel: 0.92,
+        averageRoundsPerNegotiation: 3.0,
+        successRate: 0.85,
+        fairnessIndex: 0.91,
+        nashProduct: 0.79
+      },
+      requirements: {
+        total: 25,
+        requirementsPerStakeholder: "2.1"
+      },
+      implementationTimeline: {
+        phase1: "2024-02-01",
+        phase2: "2024-03-15",
+        phase3: "2024-05-01"
+      },
+      qualityStandards: {
+        codeCoverage: "85%",
+        performance: "95%",
+        security: "98%",
+        accessibility: "90%"
+      },
+      acceptanceCriteria: [
+        "All stakeholders approve final requirements",
+        "Blockchain verification completed",
+        "Implementation timeline approved"
+      ],
+      riskMitigation: [
+        "Regular stakeholder check-ins",
+        "Automated conflict detection",
+        "Blockchain audit trail"
+      ],
+      blockchainVerification: {
+        recorded: true,
+        hash: "0x1234567890abcdef",
+        timestamp: "2024-01-15T10:30:00Z",
+        status: "verified"
+      }
     };
     
     return finalProposalMetrics;
@@ -256,21 +292,11 @@ export const getResearchMetrics = async (): Promise<ResearchMetrics> => {
   try {
     // Mock research metrics since public endpoint doesn't exist
     const researchMetrics: ResearchMetrics = {
-      totalStudies: 8,
-      activeStudies: 3,
-      completedStudies: 5,
-      participantCount: 156,
-      dataPoints: 2847,
-      successRate: 0.89,
-      averageStudyDuration: 4.2,
-      publicationCount: 3,
-      citationCount: 12,
-      researchQuality: 0.91,
-      methodologyScore: 0.88,
-      dataIntegrity: 0.94,
-      reproducibility: 0.86,
-      innovationIndex: 0.82,
-      impactScore: 0.79
+      evaluationDataPoints: 2847,
+      benchmarkVariantsTested: 8,
+      statisticalSignificance: 0.95,
+      researchGrade: "A+",
+      evaluationFramework: "Blockchain-Based Negotiation System"
     };
     
     return researchMetrics;
@@ -284,24 +310,11 @@ export const getBlockchainMetrics = async (): Promise<BlockchainMetrics> => {
   try {
     // Mock blockchain metrics since public endpoint doesn't exist
     const blockchainMetrics: BlockchainMetrics = {
-      totalTransactions: 1247,
-      successfulTransactions: 1189,
-      failedTransactions: 58,
-      averageGasUsed: 125000,
-      totalGasUsed: 155875000,
-      blockHeight: 18472947,
-      networkHashRate: 285.6,
-      transactionFees: 0.0234,
-      confirmationTime: 12.5,
-      networkLatency: 45.2,
-      nodeCount: 8,
-      consensusAlgorithm: 'Proof of Stake',
-      blockTime: 12.0,
-      throughput: 15.2,
-      scalability: 0.87,
-      security: 0.94,
-      decentralization: 0.82,
-      energyEfficiency: 0.91
+      integration: "Ethereum Mainnet",
+      immutableRecords: "98%",
+      transparencyLevel: "High",
+      auditTrail: "Complete",
+      verificationStatus: "Verified"
     };
     
     return blockchainMetrics;
